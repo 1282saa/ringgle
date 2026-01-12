@@ -235,6 +235,25 @@ export function getKoreanDateTime() {
 }
 
 // ============================================
+// 디바이스 ID 유틸리티
+// ============================================
+
+/**
+ * 디바이스 고유 ID 가져오기
+ * 없으면 새로 생성하여 저장
+ *
+ * @returns {string} UUID 형식의 디바이스 ID
+ */
+export function getDeviceId() {
+  let deviceId = localStorage.getItem(STORAGE_KEYS.DEVICE_ID)
+  if (!deviceId) {
+    deviceId = crypto.randomUUID()
+    localStorage.setItem(STORAGE_KEYS.DEVICE_ID, deviceId)
+  }
+  return deviceId
+}
+
+// ============================================
 // 배열 유틸리티
 // ============================================
 
