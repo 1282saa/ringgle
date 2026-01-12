@@ -42,6 +42,21 @@
         "s3:DeleteObject"
       ],
       "Resource": "arn:aws:s3:::eng-learning-audio/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:PutItem",
+        "dynamodb:GetItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query",
+        "dynamodb:BatchWriteItem"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:us-east-1:*:table/eng-learning-conversations",
+        "arn:aws:dynamodb:us-east-1:*:table/eng-learning-conversations/index/*"
+      ]
     }
   ]
 }
