@@ -1,30 +1,63 @@
+/**
+ * @file pages/Call.jsx
+ * @description AI 튜터와의 음성 대화 화면
+ *
+ * 주요 기능:
+ * - 실시간 음성 인식 (Web Speech API)
+ * - AI 응답 + 한국어 번역 표시
+ * - 음성 합성 (Amazon Polly via Lambda)
+ * - 대화 기록 DynamoDB 저장
+ */
+
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Mic, MicOff, Volume2, Captions } from 'lucide-react'
-import { sendMessage, textToSpeech, playAudioBase64 } from '../utils/api'
+import {
+  sendMessage,
+  textToSpeech,
+  playAudioBase64,
+  startSession,
+  endSession,
+  saveMessage,
+  analyzeConversationWithSave
+} from '../utils/api'
+import { getDeviceId, generateSessionId } from '../utils/helpers'
+import { TUTORS } from '../constants'
 
 function Call() {
   const navigate = useNavigate()
+
+  // 기본 상태
   const [callTime, setCallTime] = useState(0)
   const [isListening, setIsListening] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
-  const [showSubtitles, setShowSubtitles] = useState(false)
+  const [showSubtitles, setShowSubtitles] = useState(true) // 기본 켜짐
+
+  // 대화 데이터
   const [messages, setMessages] = useState([])
   const [transcript, setTranscript] = useState('')
   const [currentSubtitle, setCurrentSubtitle] = useState('')
+  const [koreanSubtitle, setKoreanSubtitle] = useState('') // 한국어 번역
   const [turnCount, setTurnCount] = useState(0)
   const [wordCount, setWordCount] = useState(0)
 
+  // 세션 관리
+  const [deviceId] = useState(() => getDeviceId())
+  const [sessionId] = useState(() => generateSessionId())
+  const [sessionStarted, setSessionStarted] = useState(false)
+
+  // Refs
   const timerRef = useRef(null)
   const recognitionRef = useRef(null)
   const audioRef = useRef(null)
 
   // 설정 로드
   const settings = JSON.parse(localStorage.getItem('tutorSettings') || '{}')
-  const gender = settings.gender || 'female'
-  const tutorName = gender === 'male' ? 'James' : 'Gwen'
+  const tutorId = settings.tutorId || 'gwen'
+  const tutor = TUTORS.find(t => t.id === tutorId) || TUTORS[0]
+  const tutorName = tutor.name
   const tutorInitial = tutorName[0]
 
   // 타이머
@@ -83,28 +116,68 @@ function Call() {
     startConversation()
   }, [])
 
+  /**
+   * 대화 시작 - 세션 생성 및 첫 인사
+   */
   const startConversation = async () => {
     setIsLoading(true)
+
     try {
+      // 1. 세션 시작 (DynamoDB 저장)
+      await startSession(deviceId, sessionId, settings, tutorName)
+      setSessionStarted(true)
+
+      // 2. AI 첫 인사 요청
       const response = await sendMessage([], settings)
+
       const aiMessage = {
         role: 'assistant',
         content: response.message,
-        speaker: 'ai'
+        translation: response.translation,
+        speaker: 'ai',
+        turnNumber: 1
       }
       setMessages([aiMessage])
       setCurrentSubtitle(response.message)
+      setKoreanSubtitle(response.translation || '')
+      setTurnCount(1)
+
+      // 3. 메시지 저장 (비동기, 에러 무시)
+      saveMessage(deviceId, sessionId, {
+        role: 'assistant',
+        content: response.message,
+        translation: response.translation,
+        turnNumber: 1
+      }).catch(err => console.warn('Save message error:', err))
+
+      // 4. 음성 출력
       await speakText(response.message)
+
     } catch (err) {
       console.error('Start conversation error:', err)
-      const mockMessage = "Hello! This is " + tutorName + ". How are you doing today?"
-      setMessages([{ speaker: 'ai', content: mockMessage }])
+      // Fallback 메시지
+      const mockMessage = `Hello! This is ${tutorName}. How are you doing today?`
+      const mockTranslation = `안녕하세요! ${tutorName}입니다. 오늘 어떻게 지내세요?`
+      setMessages([{ speaker: 'ai', content: mockMessage, translation: mockTranslation }])
       setCurrentSubtitle(mockMessage)
+      setKoreanSubtitle(mockTranslation)
+      setTurnCount(1)
+
+      // Fallback에서도 음성 출력 시도
+      try {
+        await speakText(mockMessage)
+      } catch (ttsErr) {
+        console.warn('TTS fallback error:', ttsErr)
+        startListening()
+      }
     } finally {
       setIsLoading(false)
     }
   }
 
+  /**
+   * 텍스트 음성 출력
+   */
   const speakText = async (text) => {
     setIsSpeaking(true)
     setCurrentSubtitle(text)
@@ -120,6 +193,7 @@ function Call() {
       startListening()
     } catch (err) {
       console.error('TTS error:', err)
+      // 브라우저 TTS 폴백
       if ('speechSynthesis' in window) {
         const utterance = new SpeechSynthesisUtterance(text)
         utterance.lang = 'en-US'
@@ -138,6 +212,9 @@ function Call() {
     }
   }
 
+  /**
+   * 음성 인식 시작
+   */
   const startListening = () => {
     if (recognitionRef.current && !isMuted) {
       setIsListening(true)
@@ -150,6 +227,9 @@ function Call() {
     }
   }
 
+  /**
+   * 음성 인식 중지
+   */
   const stopListening = () => {
     if (recognitionRef.current) {
       recognitionRef.current.stop()
@@ -157,6 +237,9 @@ function Call() {
     }
   }
 
+  /**
+   * 마이크 토글
+   */
   const toggleMute = () => {
     if (isMuted) {
       setIsMuted(false)
@@ -167,6 +250,9 @@ function Call() {
     }
   }
 
+  /**
+   * 사용자 발화 처리
+   */
   const handleUserSpeech = async (text) => {
     if (!text.trim()) return
 
@@ -186,10 +272,18 @@ function Call() {
     setTurnCount(newTurnCount)
     setWordCount(newWordCount)
     setCurrentSubtitle(text)
+    setKoreanSubtitle('') // 사용자 발화는 번역 없음
 
-    // 잠시 멈추고 AI 응답
+    // 음성 인식 중지 후 AI 응답 요청
     stopListening()
     setIsLoading(true)
+
+    // 사용자 메시지 저장 (비동기)
+    saveMessage(deviceId, sessionId, {
+      role: 'user',
+      content: text,
+      turnNumber: newTurnCount
+    }).catch(err => console.warn('Save user message error:', err))
 
     try {
       const apiMessages = updatedMessages.map(m => ({
@@ -199,14 +293,30 @@ function Call() {
 
       const response = await sendMessage(apiMessages, settings)
 
+      const aiTurnNumber = newTurnCount + 1
       const aiMessage = {
         role: 'assistant',
         content: response.message,
-        speaker: 'ai'
+        translation: response.translation,
+        speaker: 'ai',
+        turnNumber: aiTurnNumber
       }
 
       setMessages(prev => [...prev, aiMessage])
+      setTurnCount(aiTurnNumber)
+      setCurrentSubtitle(response.message)
+      setKoreanSubtitle(response.translation || '')
+
+      // AI 메시지 저장 (비동기)
+      saveMessage(deviceId, sessionId, {
+        role: 'assistant',
+        content: response.message,
+        translation: response.translation,
+        turnNumber: aiTurnNumber
+      }).catch(err => console.warn('Save AI message error:', err))
+
       await speakText(response.message)
+
     } catch (err) {
       console.error('Chat error:', err)
       setTimeout(() => startListening(), 1000)
@@ -215,13 +325,20 @@ function Call() {
     }
   }
 
+  /**
+   * 시간 포맷팅
+   */
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   }
 
-  const handleEndCall = () => {
+  /**
+   * 통화 종료
+   */
+  const handleEndCall = async () => {
+    // 타이머 및 음성 정리
     clearInterval(timerRef.current)
     if (recognitionRef.current) {
       recognitionRef.current.abort()
@@ -234,25 +351,37 @@ function Call() {
       speechSynthesis.cancel()
     }
 
-    // 통화 결과 저장
+    // 세션 종료 API 호출 (비동기)
+    if (sessionStarted) {
+      endSession(deviceId, sessionId, {
+        duration: callTime,
+        turnCount,
+        wordCount
+      }).catch(err => console.warn('End session error:', err))
+    }
+
+    // 통화 결과 저장 (로컬)
     const result = {
       duration: callTime,
       messages: messages,
       date: new Date().toISOString(),
       turnCount,
       wordCount,
-      tutorName
+      tutorName,
+      deviceId,
+      sessionId
     }
     localStorage.setItem('lastCallResult', JSON.stringify(result))
 
-    // 통화 기록 저장
+    // 통화 기록 저장 (로컬)
     const history = JSON.parse(localStorage.getItem('callHistory') || '[]')
     history.unshift({
       date: new Date().toLocaleDateString('ko-KR'),
       fullDate: new Date().toLocaleString('ko-KR'),
       duration: formatTime(callTime),
       words: wordCount,
-      tutorName
+      tutorName,
+      sessionId
     })
     localStorage.setItem('callHistory', JSON.stringify(history.slice(0, 10)))
 
@@ -279,15 +408,18 @@ function Call() {
         {isSpeaking && <div className="status-indicator speaking">AI가 말하는 중</div>}
         {isListening && !isSpeaking && <div className="status-indicator listening">듣고 있어요</div>}
 
-        {/* Subtitle Area */}
+        {/* Subtitle Area - 영어 + 한국어 번역 */}
         {showSubtitles && currentSubtitle && (
           <div className="subtitle-area">
-            <p>{currentSubtitle}</p>
+            <p className="subtitle-en">{currentSubtitle}</p>
+            {koreanSubtitle && (
+              <p className="subtitle-ko">{koreanSubtitle}</p>
+            )}
           </div>
         )}
       </div>
 
-      {/* Bottom Controls - 링글 스타일 */}
+      {/* Bottom Controls */}
       <div className="call-controls">
         <div className="control-buttons">
           <button
@@ -391,6 +523,7 @@ function Call() {
           50% { opacity: 0.6; }
         }
 
+        /* Subtitle Area - 영어 + 한국어 */
         .subtitle-area {
           position: absolute;
           bottom: 200px;
@@ -401,11 +534,20 @@ function Call() {
           padding: 16px 20px;
         }
 
-        .subtitle-area p {
+        .subtitle-en {
           color: white;
           font-size: 16px;
           line-height: 1.5;
           text-align: center;
+          margin-bottom: 8px;
+        }
+
+        .subtitle-ko {
+          color: rgba(139, 92, 246, 0.9);
+          font-size: 14px;
+          line-height: 1.5;
+          text-align: center;
+          font-style: italic;
         }
 
         /* Bottom Controls */

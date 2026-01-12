@@ -165,6 +165,52 @@ export function saveLastCallResult(result) {
 }
 
 // ============================================
+// UUID 및 디바이스 ID 유틸리티
+// ============================================
+
+/**
+ * UUID v4 생성
+ * crypto.randomUUID()를 우선 사용하고, 지원하지 않으면 폴백
+ *
+ * @returns {string} UUID v4 형식의 문자열
+ */
+export function generateUUID() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID()
+  }
+  // 폴백: 브라우저가 crypto.randomUUID를 지원하지 않는 경우
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0
+    const v = c === 'x' ? r : (r & 0x3 | 0x8)
+    return v.toString(16)
+  })
+}
+
+/**
+ * 디바이스 ID 조회 (없으면 생성하여 저장)
+ * 앱 최초 실행 시 UUID를 생성하고 localStorage에 영구 저장
+ *
+ * @returns {string} 디바이스 UUID
+ */
+export function getDeviceId() {
+  let deviceId = getFromStorage(STORAGE_KEYS.DEVICE_ID, null)
+  if (!deviceId) {
+    deviceId = generateUUID()
+    setToStorage(STORAGE_KEYS.DEVICE_ID, deviceId)
+  }
+  return deviceId
+}
+
+/**
+ * 새 세션 ID 생성
+ *
+ * @returns {string} 세션 UUID
+ */
+export function generateSessionId() {
+  return generateUUID()
+}
+
+// ============================================
 // 텍스트/문자열 유틸리티
 // ============================================
 
