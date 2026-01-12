@@ -2,15 +2,33 @@ import json
 import boto3
 import re
 import base64
+from datetime import datetime, timedelta
 
 # AWS 클라이언트
 bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
 polly = boto3.client('polly', region_name='us-east-1')
 transcribe = boto3.client('transcribe', region_name='us-east-1')
 s3 = boto3.client('s3', region_name='us-east-1')
+dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
 
 # S3 버킷 (Transcribe용)
 S3_BUCKET = 'eng-learning-audio'
+
+# DynamoDB 테이블
+DYNAMODB_TABLE = 'eng-learning-conversations'
+
+# TTL: 90일 (초 단위)
+TTL_DAYS = 90
+
+
+def get_table():
+    """DynamoDB 테이블 객체 반환"""
+    return dynamodb.Table(DYNAMODB_TABLE)
+
+
+def get_ttl():
+    """TTL 타임스탬프 계산 (90일 후)"""
+    return int((datetime.utcnow() + timedelta(days=TTL_DAYS)).timestamp())
 
 # 모델 설정 (베타용 저비용)
 CLAUDE_MODEL = 'anthropic.claude-3-haiku-20240307-v1:0'  # Haiku: 92% 저렴
@@ -96,6 +114,22 @@ def lambda_handler(event, context):
             return handle_stt(body, headers)
         elif action == 'analyze':
             return handle_analyze(body, headers)
+        elif action == 'save_settings':
+            return handle_save_settings(body, headers)
+        elif action == 'get_settings':
+            return handle_get_settings(body, headers)
+        elif action == 'start_session':
+            return handle_start_session(body, headers)
+        elif action == 'end_session':
+            return handle_end_session(body, headers)
+        elif action == 'save_message':
+            return handle_save_message(body, headers)
+        elif action == 'get_sessions':
+            return handle_get_sessions(body, headers)
+        elif action == 'get_session_detail':
+            return handle_get_session_detail(body, headers)
+        elif action == 'delete_session':
+            return handle_delete_session(body, headers)
         else:
             return {
                 'statusCode': 400,
@@ -422,4 +456,485 @@ def handle_analyze(body, headers):
                 'success': True,
                 'fallback': True
             })
+        }
+
+
+# ============================================
+# 사용자 설정 핸들러
+# ============================================
+
+def handle_save_settings(body, headers):
+    """
+    사용자 맞춤설정 저장
+
+    Request:
+        deviceId: 디바이스 UUID
+        settings: 튜터 설정 객체
+            - tutorId: 튜터 ID
+            - tutorName: 튜터 이름
+            - accent: 억양 (us, uk, au, in)
+            - gender: 성별 (male, female)
+            - speed: 속도 (slow, normal, fast)
+            - level: 난이도 (beginner, intermediate, advanced)
+            - duration: 통화 시간 (5, 10)
+            - topic: 주제 (business, daily, travel, interview)
+
+    Response:
+        success: boolean
+        updatedAt: ISO timestamp
+    """
+    device_id = body.get('deviceId')
+    settings = body.get('settings', {})
+
+    if not device_id:
+        return {
+            'statusCode': 400,
+            'headers': headers,
+            'body': json.dumps({'error': 'deviceId is required'})
+        }
+
+    try:
+        table = get_table()
+        now = datetime.utcnow().isoformat() + 'Z'
+
+        item = {
+            'PK': f'DEVICE#{device_id}',
+            'SK': 'SETTINGS',
+            'type': 'USER_SETTINGS',
+            'deviceId': device_id,
+            'settings': settings,
+            'updatedAt': now,
+            'createdAt': now,
+            'ttl': get_ttl()
+        }
+
+        # upsert (있으면 업데이트, 없으면 생성)
+        table.put_item(Item=item)
+
+        return {
+            'statusCode': 200,
+            'headers': headers,
+            'body': json.dumps({
+                'success': True,
+                'settings': settings,
+                'updatedAt': now
+            })
+        }
+
+    except Exception as e:
+        print(f"Save settings error: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({'error': str(e)})
+        }
+
+
+def handle_get_settings(body, headers):
+    """
+    사용자 맞춤설정 조회
+
+    Request:
+        deviceId: 디바이스 UUID
+
+    Response:
+        success: boolean
+        settings: 설정 객체 (없으면 null)
+        updatedAt: 마지막 업데이트 시간
+    """
+    device_id = body.get('deviceId')
+
+    if not device_id:
+        return {
+            'statusCode': 400,
+            'headers': headers,
+            'body': json.dumps({'error': 'deviceId is required'})
+        }
+
+    try:
+        table = get_table()
+
+        response = table.get_item(
+            Key={
+                'PK': f'DEVICE#{device_id}',
+                'SK': 'SETTINGS'
+            }
+        )
+
+        item = response.get('Item')
+
+        if item:
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': True,
+                    'settings': item.get('settings', {}),
+                    'updatedAt': item.get('updatedAt')
+                })
+            }
+        else:
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': True,
+                    'settings': None,
+                    'message': 'No settings found for this device'
+                })
+            }
+
+    except Exception as e:
+        print(f"Get settings error: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({'error': str(e)})
+        }
+
+
+# ============================================
+# 세션 관리 핸들러
+# ============================================
+
+def handle_start_session(body, headers):
+    """새 대화 세션 시작"""
+    device_id = body.get('deviceId')
+    session_id = body.get('sessionId')
+    settings = body.get('settings', {})
+    tutor_name = body.get('tutorName', 'Gwen')
+
+    if not device_id or not session_id:
+        return {
+            'statusCode': 400,
+            'headers': headers,
+            'body': json.dumps({'error': 'deviceId and sessionId are required'})
+        }
+
+    try:
+        table = get_table()
+        now = datetime.utcnow().isoformat() + 'Z'
+
+        item = {
+            'PK': f'DEVICE#{device_id}',
+            'SK': f'SESSION#{session_id}#META',
+            'GSI1PK': f'SESSION#{session_id}',
+            'GSI1SK': 'META',
+            'type': 'SESSION_META',
+            'deviceId': device_id,
+            'sessionId': session_id,
+            'tutorName': tutor_name,
+            'settings': settings,
+            'startedAt': now,
+            'endedAt': None,
+            'duration': 0,
+            'turnCount': 0,
+            'wordCount': 0,
+            'status': 'active',
+            'createdAt': now,
+            'ttl': get_ttl()
+        }
+
+        table.put_item(Item=item)
+
+        return {
+            'statusCode': 200,
+            'headers': headers,
+            'body': json.dumps({
+                'success': True,
+                'sessionId': session_id,
+                'startedAt': now
+            })
+        }
+
+    except Exception as e:
+        print(f"Start session error: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({'error': str(e)})
+        }
+
+
+def handle_end_session(body, headers):
+    """세션 종료 및 통계 업데이트"""
+    device_id = body.get('deviceId')
+    session_id = body.get('sessionId')
+    duration = body.get('duration', 0)
+    turn_count = body.get('turnCount', 0)
+    word_count = body.get('wordCount', 0)
+
+    if not device_id or not session_id:
+        return {
+            'statusCode': 400,
+            'headers': headers,
+            'body': json.dumps({'error': 'deviceId and sessionId are required'})
+        }
+
+    try:
+        table = get_table()
+        now = datetime.utcnow().isoformat() + 'Z'
+
+        table.update_item(
+            Key={
+                'PK': f'DEVICE#{device_id}',
+                'SK': f'SESSION#{session_id}#META'
+            },
+            UpdateExpression='SET endedAt = :endedAt, #dur = :duration, turnCount = :turnCount, wordCount = :wordCount, #st = :status',
+            ExpressionAttributeNames={
+                '#dur': 'duration',
+                '#st': 'status'
+            },
+            ExpressionAttributeValues={
+                ':endedAt': now,
+                ':duration': duration,
+                ':turnCount': turn_count,
+                ':wordCount': word_count,
+                ':status': 'completed'
+            }
+        )
+
+        return {
+            'statusCode': 200,
+            'headers': headers,
+            'body': json.dumps({
+                'success': True,
+                'endedAt': now
+            })
+        }
+
+    except Exception as e:
+        print(f"End session error: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({'error': str(e)})
+        }
+
+
+def handle_save_message(body, headers):
+    """대화 메시지 저장"""
+    device_id = body.get('deviceId')
+    session_id = body.get('sessionId')
+    message = body.get('message', {})
+
+    if not device_id or not session_id or not message:
+        return {
+            'statusCode': 400,
+            'headers': headers,
+            'body': json.dumps({'error': 'deviceId, sessionId, and message are required'})
+        }
+
+    try:
+        table = get_table()
+        now = datetime.utcnow().isoformat() + 'Z'
+        message_id = f'MSG#{now}'
+
+        item = {
+            'PK': f'DEVICE#{device_id}',
+            'SK': f'SESSION#{session_id}#{message_id}',
+            'GSI1PK': f'SESSION#{session_id}',
+            'GSI1SK': message_id,
+            'type': 'MESSAGE',
+            'deviceId': device_id,
+            'sessionId': session_id,
+            'role': message.get('role', 'user'),
+            'content': message.get('content', ''),
+            'translation': message.get('translation'),
+            'turnNumber': message.get('turnNumber', 0),
+            'timestamp': now,
+            'createdAt': now,
+            'ttl': get_ttl()
+        }
+
+        table.put_item(Item=item)
+
+        return {
+            'statusCode': 200,
+            'headers': headers,
+            'body': json.dumps({
+                'success': True,
+                'messageId': message_id
+            })
+        }
+
+    except Exception as e:
+        print(f"Save message error: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({'error': str(e)})
+        }
+
+
+def handle_get_sessions(body, headers):
+    """사용자의 세션 목록 조회"""
+    device_id = body.get('deviceId')
+    limit = body.get('limit', 10)
+
+    if not device_id:
+        return {
+            'statusCode': 400,
+            'headers': headers,
+            'body': json.dumps({'error': 'deviceId is required'})
+        }
+
+    try:
+        table = get_table()
+
+        response = table.query(
+            KeyConditionExpression='PK = :pk AND begins_with(SK, :sk_prefix)',
+            FilterExpression='#type = :type',
+            ExpressionAttributeNames={'#type': 'type'},
+            ExpressionAttributeValues={
+                ':pk': f'DEVICE#{device_id}',
+                ':sk_prefix': 'SESSION#',
+                ':type': 'SESSION_META'
+            },
+            Limit=limit,
+            ScanIndexForward=False
+        )
+
+        sessions = []
+        for item in response.get('Items', []):
+            sessions.append({
+                'sessionId': item.get('sessionId'),
+                'tutorName': item.get('tutorName'),
+                'startedAt': item.get('startedAt'),
+                'endedAt': item.get('endedAt'),
+                'duration': int(item.get('duration', 0)),
+                'turnCount': int(item.get('turnCount', 0)),
+                'wordCount': int(item.get('wordCount', 0)),
+                'status': item.get('status')
+            })
+
+        return {
+            'statusCode': 200,
+            'headers': headers,
+            'body': json.dumps({'sessions': sessions})
+        }
+
+    except Exception as e:
+        print(f"Get sessions error: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({'error': str(e)})
+        }
+
+
+def handle_get_session_detail(body, headers):
+    """특정 세션의 상세 정보 조회"""
+    device_id = body.get('deviceId')
+    session_id = body.get('sessionId')
+
+    if not device_id or not session_id:
+        return {
+            'statusCode': 400,
+            'headers': headers,
+            'body': json.dumps({'error': 'deviceId and sessionId are required'})
+        }
+
+    try:
+        table = get_table()
+
+        response = table.query(
+            IndexName='GSI1',
+            KeyConditionExpression='GSI1PK = :pk',
+            ExpressionAttributeValues={':pk': f'SESSION#{session_id}'},
+            ScanIndexForward=True
+        )
+
+        items = response.get('Items', [])
+        session_meta = None
+        messages = []
+
+        for item in items:
+            item_type = item.get('type')
+            if item_type == 'SESSION_META':
+                session_meta = {
+                    'sessionId': item.get('sessionId'),
+                    'tutorName': item.get('tutorName'),
+                    'startedAt': item.get('startedAt'),
+                    'endedAt': item.get('endedAt'),
+                    'duration': int(item.get('duration', 0)),
+                    'turnCount': int(item.get('turnCount', 0)),
+                    'wordCount': int(item.get('wordCount', 0)),
+                    'status': item.get('status')
+                }
+            elif item_type == 'MESSAGE':
+                messages.append({
+                    'role': item.get('role'),
+                    'content': item.get('content'),
+                    'translation': item.get('translation'),
+                    'timestamp': item.get('timestamp'),
+                    'turnNumber': int(item.get('turnNumber', 0))
+                })
+
+        messages.sort(key=lambda x: x.get('turnNumber', 0))
+
+        return {
+            'statusCode': 200,
+            'headers': headers,
+            'body': json.dumps({
+                'session': session_meta,
+                'messages': messages
+            })
+        }
+
+    except Exception as e:
+        print(f"Get session detail error: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({'error': str(e)})
+        }
+
+
+def handle_delete_session(body, headers):
+    """세션 삭제"""
+    device_id = body.get('deviceId')
+    session_id = body.get('sessionId')
+
+    if not device_id or not session_id:
+        return {
+            'statusCode': 400,
+            'headers': headers,
+            'body': json.dumps({'error': 'deviceId and sessionId are required'})
+        }
+
+    try:
+        table = get_table()
+
+        response = table.query(
+            KeyConditionExpression='PK = :pk AND begins_with(SK, :sk_prefix)',
+            ExpressionAttributeValues={
+                ':pk': f'DEVICE#{device_id}',
+                ':sk_prefix': f'SESSION#{session_id}'
+            }
+        )
+
+        items = response.get('Items', [])
+        deleted_count = 0
+
+        with table.batch_writer() as batch:
+            for item in items:
+                batch.delete_item(Key={'PK': item['PK'], 'SK': item['SK']})
+                deleted_count += 1
+
+        return {
+            'statusCode': 200,
+            'headers': headers,
+            'body': json.dumps({
+                'success': True,
+                'deletedCount': deleted_count
+            })
+        }
+
+    except Exception as e:
+        print(f"Delete session error: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({'error': str(e)})
         }

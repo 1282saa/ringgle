@@ -1,224 +1,360 @@
 /**
  * @file pages/Settings.jsx
- * @description AI 튜터 설정 페이지
+ * @description 맞춤설정 메인 페이지
  *
- * 사용자가 AI 튜터의 다양한 옵션을 설정할 수 있는 화면입니다.
- *
- * 설정 가능 항목:
- * - 억양 (미국, 영국, 호주, 인도)
- * - 성별 (남성, 여성)
- * - 말하기 속도 (느리게, 보통, 빠르게)
- * - 난이도 (초급, 중급, 고급)
- * - 대화 주제 (비즈니스, 일상 대화, 여행, 면접)
- *
- * @route /settings
+ * 링글 앱 스타일의 설정 메인 화면
+ * 섹션: 공통 설정, 일반 전화, 그 외 전화
  */
 
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check } from 'lucide-react'
+import { ChevronRight, X } from 'lucide-react'
+import { getFromStorage, setToStorage } from '../utils/helpers'
 
-// 상수 및 유틸리티 import
-import {
-  ACCENTS,
-  GENDERS,
-  SPEEDS,
-  LEVELS,
-  TOPICS,
-  DEFAULT_SETTINGS,
-} from '../constants'
-import { getTutorSettings, saveTutorSettings } from '../utils/helpers'
-
-/**
- * 설정 페이지 컴포넌트
- *
- * @returns {JSX.Element} 설정 페이지
- */
 function Settings() {
   const navigate = useNavigate()
 
-  // ============================================
-  // State 정의
-  // ============================================
+  // 설정 상태
+  const [userName, setUserName] = useState('')
+  const [showNameModal, setShowNameModal] = useState(false)
+  const [tempName, setTempName] = useState('')
+  const [roleplayAlert, setRoleplayAlert] = useState(true)
+  const [videoReviewAlert, setVideoReviewAlert] = useState(true)
 
-  const [accent, setAccent] = useState(DEFAULT_SETTINGS.accent)
-  const [gender, setGender] = useState(DEFAULT_SETTINGS.gender)
-  const [speed, setSpeed] = useState(DEFAULT_SETTINGS.speed)
-  const [level, setLevel] = useState(DEFAULT_SETTINGS.level)
-  const [topic, setTopic] = useState(DEFAULT_SETTINGS.topic)
-
-  // ============================================
-  // Effects
-  // ============================================
-
-  /**
-   * 컴포넌트 마운트 시 저장된 설정 로드
-   */
+  // 초기 로드
   useEffect(() => {
-    const saved = getTutorSettings()
-    if (saved.accent) setAccent(saved.accent)
-    if (saved.gender) setGender(saved.gender)
-    if (saved.speed) setSpeed(saved.speed)
-    if (saved.level) setLevel(saved.level)
-    if (saved.topic) setTopic(saved.topic)
+    const savedName = getFromStorage('userName', '사용자')
+    setUserName(savedName)
+
+    const savedRoleplayAlert = getFromStorage('roleplayAlert', true)
+    const savedVideoReviewAlert = getFromStorage('videoReviewAlert', true)
+    setRoleplayAlert(savedRoleplayAlert)
+    setVideoReviewAlert(savedVideoReviewAlert)
   }, [])
 
-  // ============================================
-  // Event Handlers
-  // ============================================
-
-  /**
-   * 설정 저장 후 홈으로 이동
-   */
-  const handleSave = () => {
-    const settings = { accent, gender, speed, level, topic }
-    saveTutorSettings(settings)
-    navigate('/')
+  // 이름 저장
+  const handleSaveName = () => {
+    if (tempName.trim()) {
+      setUserName(tempName.trim())
+      setToStorage('userName', tempName.trim())
+    }
+    setShowNameModal(false)
   }
 
-  // ============================================
-  // Render
-  // ============================================
+  // 토글 핸들러
+  const handleRoleplayToggle = () => {
+    const newValue = !roleplayAlert
+    setRoleplayAlert(newValue)
+    setToStorage('roleplayAlert', newValue)
+  }
+
+  const handleVideoReviewToggle = () => {
+    const newValue = !videoReviewAlert
+    setVideoReviewAlert(newValue)
+    setToStorage('videoReviewAlert', newValue)
+  }
 
   return (
-    <>
-      {/* 헤더 - 뒤로가기 / 타이틀 / 저장 버튼 */}
-      <header className="header">
-        <div className="header-content">
-          <button
-            onClick={() => navigate(-1)}
-            style={{ background: 'none', padding: 0 }}
-            aria-label="뒤로 가기"
-          >
-            <ArrowLeft size={24} color="#374151" />
-          </button>
-          <span style={{ fontWeight: 600 }}>AI 튜터 설정</span>
-          <button
-            onClick={handleSave}
-            style={{ background: 'none', padding: 0 }}
-            aria-label="설정 저장"
-          >
-            <Check size={24} color="#6366f1" />
-          </button>
-        </div>
+    <div className="settings-main-page">
+      {/* 헤더 */}
+      <header className="settings-main-header">
+        <h1>맞춤설정</h1>
+        <button className="close-btn" onClick={() => navigate('/')}>
+          <X size={24} color="#9ca3af" />
+        </button>
       </header>
 
-      <div className="page">
-        {/* 억양 선택 섹션 */}
-        <OptionGroup
-          label="억양 선택"
-          options={ACCENTS}
-          value={accent}
-          onChange={setAccent}
-          showIcon
-          showSublabel
-        />
-
-        {/* 성별 선택 섹션 */}
-        <OptionGroup
-          label="성별"
-          options={GENDERS}
-          value={gender}
-          onChange={setGender}
-          showIcon
-        />
-
-        {/* 말하기 속도 섹션 */}
-        <OptionGroup
-          label="말하기 속도"
-          options={SPEEDS}
-          value={speed}
-          onChange={setSpeed}
-          showSublabel
-          columns={3}
-        />
-
-        {/* 난이도 섹션 */}
-        <OptionGroup
-          label="난이도"
-          options={LEVELS}
-          value={level}
-          onChange={setLevel}
-          showSublabel
-          columns={3}
-        />
-
-        {/* 대화 주제 섹션 */}
-        <OptionGroup
-          label="대화 주제"
-          options={TOPICS}
-          value={topic}
-          onChange={setTopic}
-          showIcon
-        />
-
-        {/* 저장 버튼 */}
-        <button
-          className="btn btn-primary btn-full btn-lg"
-          onClick={handleSave}
-        >
-          저장하기
-        </button>
-      </div>
-    </>
-  )
-}
-
-// ============================================
-// 서브 컴포넌트
-// ============================================
-
-/**
- * 옵션 그룹 컴포넌트
- * 설정 항목의 선택 UI를 렌더링
- *
- * @param {Object} props - 컴포넌트 props
- * @param {string} props.label - 그룹 라벨
- * @param {Array} props.options - 선택 옵션 배열
- * @param {string} props.value - 현재 선택된 값
- * @param {Function} props.onChange - 값 변경 핸들러
- * @param {boolean} [props.showIcon=false] - 아이콘 표시 여부
- * @param {boolean} [props.showSublabel=false] - 서브라벨 표시 여부
- * @param {number} [props.columns] - 그리드 컬럼 수
- */
-function OptionGroup({
-  label,
-  options,
-  value,
-  onChange,
-  showIcon = false,
-  showSublabel = false,
-  columns,
-}) {
-  // 그리드 클래스 결정
-  const gridClass = columns ? `option-grid cols-${columns}` : 'option-grid'
-
-  return (
-    <div className="option-group">
-      <label className="option-label">{label}</label>
-      <div className={gridClass}>
-        {options.map((item) => (
-          <div
-            key={item.id}
-            className={`option-item ${value === item.id ? 'selected' : ''}`}
-            onClick={() => onChange(item.id)}
-            role="button"
-            tabIndex={0}
-            onKeyPress={(e) => e.key === 'Enter' && onChange(item.id)}
-          >
-            {/* 아이콘 (있는 경우) */}
-            {showIcon && item.icon && (
-              <div className="icon">{item.icon}</div>
-            )}
-            {/* 메인 라벨 */}
-            <div className="label">{item.label}</div>
-            {/* 서브 라벨 (있는 경우) */}
-            {showSublabel && item.sublabel && (
-              <div className="sublabel">{item.sublabel}</div>
-            )}
+      <div className="settings-main-content">
+        {/* 공통 설정 섹션 */}
+        <section className="settings-section">
+          <h2 className="section-label">공통 설정</h2>
+          <div className="settings-list">
+            <div className="settings-item" onClick={() => navigate('/settings/schedule')}>
+              <span className="item-label">일정</span>
+              <ChevronRight size={20} color="#9ca3af" />
+            </div>
+            <div className="settings-item" onClick={() => navigate('/settings/tutor')}>
+              <span className="item-label">튜터</span>
+              <ChevronRight size={20} color="#9ca3af" />
+            </div>
+            <div
+              className="settings-item"
+              onClick={() => {
+                setTempName(userName)
+                setShowNameModal(true)
+              }}
+            >
+              <span className="item-label">내 이름</span>
+              <div className="item-right">
+                <span className="item-value">{userName}</span>
+                <ChevronRight size={20} color="#9ca3af" />
+              </div>
+            </div>
           </div>
-        ))}
+        </section>
+
+        {/* 일반 전화 섹션 */}
+        <section className="settings-section">
+          <h2 className="section-label">일반 전화</h2>
+          <div className="settings-list">
+            <div className="settings-item" onClick={() => navigate('/settings/curriculum')}>
+              <span className="item-label">커리큘럼</span>
+              <ChevronRight size={20} color="#9ca3af" />
+            </div>
+          </div>
+        </section>
+
+        {/* 그 외 전화 섹션 */}
+        <section className="settings-section">
+          <h2 className="section-label">그 외 전화</h2>
+          <div className="settings-list">
+            <div className="settings-item">
+              <span className="item-label">롤플레잉/디스커션 알림</span>
+              <div className="toggle-switch" onClick={handleRoleplayToggle}>
+                <div className={`toggle-track ${roleplayAlert ? 'active' : ''}`}>
+                  <div className="toggle-thumb" />
+                </div>
+              </div>
+            </div>
+            <div className="settings-item">
+              <span className="item-label">화상 수업 리뷰</span>
+              <div className="toggle-switch" onClick={handleVideoReviewToggle}>
+                <div className={`toggle-track ${videoReviewAlert ? 'active' : ''}`}>
+                  <div className="toggle-thumb" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
+
+      {/* 이름 수정 모달 */}
+      {showNameModal && (
+        <div className="modal-overlay" onClick={() => setShowNameModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>내 이름</h3>
+              <button className="close-btn" onClick={() => setShowNameModal(false)}>
+                <X size={24} color="#9ca3af" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p className="modal-desc">AI 튜터가 부를 이름을 입력해주세요.</p>
+              <input
+                type="text"
+                className="name-input"
+                value={tempName}
+                onChange={e => setTempName(e.target.value)}
+                placeholder="이름 입력"
+                autoFocus
+              />
+            </div>
+            <button className="save-btn" onClick={handleSaveName}>
+              저장
+            </button>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        .settings-main-page {
+          min-height: 100vh;
+          background: #f5f5f5;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .settings-main-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 16px 20px;
+          background: white;
+          border-bottom: 1px solid #e5e7eb;
+        }
+
+        .settings-main-header h1 {
+          font-size: 18px;
+          font-weight: 600;
+          color: #1f2937;
+        }
+
+        .close-btn {
+          background: none;
+          padding: 4px;
+        }
+
+        .settings-main-content {
+          flex: 1;
+          padding: 20px;
+        }
+
+        .settings-section {
+          margin-bottom: 24px;
+        }
+
+        .section-label {
+          font-size: 13px;
+          font-weight: 600;
+          color: #6b7280;
+          margin-bottom: 8px;
+          padding-left: 4px;
+        }
+
+        .settings-list {
+          background: white;
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .settings-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 16px 20px;
+          border-bottom: 1px solid #f3f4f6;
+          cursor: pointer;
+          transition: background 0.2s;
+        }
+
+        .settings-item:last-child {
+          border-bottom: none;
+        }
+
+        .settings-item:active {
+          background: #f9fafb;
+        }
+
+        .item-label {
+          font-size: 16px;
+          color: #1f2937;
+        }
+
+        .item-right {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .item-value {
+          font-size: 14px;
+          color: #9ca3af;
+        }
+
+        /* 토글 스위치 */
+        .toggle-switch {
+          cursor: pointer;
+        }
+
+        .toggle-track {
+          width: 52px;
+          height: 32px;
+          background: #d1d5db;
+          border-radius: 16px;
+          position: relative;
+          transition: background 0.3s;
+        }
+
+        .toggle-track.active {
+          background: #5046e4;
+        }
+
+        .toggle-thumb {
+          width: 28px;
+          height: 28px;
+          background: white;
+          border-radius: 50%;
+          position: absolute;
+          top: 2px;
+          left: 2px;
+          transition: transform 0.3s;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+        }
+
+        .toggle-track.active .toggle-thumb {
+          transform: translateX(20px);
+        }
+
+        /* 모달 */
+        .modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.5);
+          display: flex;
+          align-items: flex-end;
+          justify-content: center;
+          z-index: 1000;
+        }
+
+        .modal-content {
+          background: white;
+          border-radius: 24px 24px 0 0;
+          width: 100%;
+          max-width: 480px;
+          padding: 24px 20px 32px;
+          animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
+        }
+
+        .modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 20px;
+        }
+
+        .modal-header h3 {
+          font-size: 18px;
+          font-weight: 600;
+          color: #1f2937;
+        }
+
+        .modal-body {
+          margin-bottom: 24px;
+        }
+
+        .modal-desc {
+          font-size: 14px;
+          color: #6b7280;
+          margin-bottom: 16px;
+        }
+
+        .name-input {
+          width: 100%;
+          padding: 16px;
+          border: 2px solid #e5e7eb;
+          border-radius: 12px;
+          font-size: 16px;
+          box-sizing: border-box;
+        }
+
+        .name-input:focus {
+          border-color: #5046e4;
+          outline: none;
+        }
+
+        .save-btn {
+          width: 100%;
+          padding: 18px;
+          background: #5046e4;
+          color: white;
+          border-radius: 12px;
+          font-size: 17px;
+          font-weight: 600;
+        }
+
+        .save-btn:active {
+          background: #4338ca;
+        }
+      `}</style>
     </div>
   )
 }

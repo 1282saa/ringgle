@@ -314,3 +314,62 @@ export async function speechToText(audioBlob, language = 'en-US') {
     'STT'
   )
 }
+
+// ============================================
+// 사용자 설정 API
+// ============================================
+
+/**
+ * 사용자 맞춤설정을 서버에 저장
+ *
+ * @param {string} deviceId - 디바이스 UUID
+ * @param {Object} settings - 튜터 설정 객체
+ * @returns {Promise<Object>} 저장 결과
+ * @returns {boolean} return.success - 성공 여부
+ * @returns {Object} return.settings - 저장된 설정
+ * @returns {string} return.updatedAt - 업데이트 시간
+ *
+ * @example
+ * const result = await saveSettingsToServer(deviceId, {
+ *   tutorId: 'tutor-1',
+ *   accent: 'uk',
+ *   gender: 'male',
+ *   speed: 'normal',
+ *   level: 'intermediate'
+ * })
+ */
+export async function saveSettingsToServer(deviceId, settings) {
+  return apiRequest(
+    {
+      action: 'save_settings',
+      deviceId,
+      settings,
+    },
+    'SaveSettings'
+  )
+}
+
+/**
+ * 서버에서 사용자 맞춤설정 조회
+ *
+ * @param {string} deviceId - 디바이스 UUID
+ * @returns {Promise<Object>} 설정 조회 결과
+ * @returns {boolean} return.success - 성공 여부
+ * @returns {Object} return.settings - 설정 객체 (없으면 null)
+ * @returns {string} [return.updatedAt] - 마지막 업데이트 시간
+ *
+ * @example
+ * const { success, settings } = await getSettingsFromServer(deviceId)
+ * if (success && settings) {
+ *   console.log('Loaded saved settings:', settings)
+ * }
+ */
+export async function getSettingsFromServer(deviceId) {
+  return apiRequest(
+    {
+      action: 'get_settings',
+      deviceId,
+    },
+    'GetSettings'
+  )
+}

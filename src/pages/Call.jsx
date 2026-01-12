@@ -1,7 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Mic, MicOff, Volume2, Captions } from 'lucide-react'
+import { Mic, MicOff, Volume2, Captions, X } from 'lucide-react'
 import { sendMessage, textToSpeech, playAudioBase64 } from '../utils/api'
+
+// 자막 설정 옵션
+const SUBTITLE_OPTIONS = [
+  { id: 'all', label: '모두 보기' },
+  { id: 'english', label: '영어만 보기' },
+  { id: 'translation', label: '번역만 보기' },
+  { id: 'off', label: '자막 끄기' },
+]
 
 function Call() {
   const navigate = useNavigate()
@@ -10,10 +18,12 @@ function Call() {
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
-  const [showSubtitles, setShowSubtitles] = useState(false)
+  const [subtitleMode, setSubtitleMode] = useState('all') // all, english, translation, off
+  const [showSubtitleModal, setShowSubtitleModal] = useState(false)
   const [messages, setMessages] = useState([])
   const [transcript, setTranscript] = useState('')
   const [currentSubtitle, setCurrentSubtitle] = useState('')
+  const [currentTranslation, setCurrentTranslation] = useState('')
   const [turnCount, setTurnCount] = useState(0)
   const [wordCount, setWordCount] = useState(0)
 
@@ -259,6 +269,17 @@ function Call() {
     navigate('/result')
   }
 
+  // 자막 모드에 따른 표시 내용
+  const getSubtitleContent = () => {
+    if (subtitleMode === 'off') return null
+    if (subtitleMode === 'english') return currentSubtitle
+    if (subtitleMode === 'translation') return currentTranslation || '(번역 준비 중...)'
+    // 'all' - 모두 보기
+    return currentSubtitle
+  }
+
+  const subtitleContent = getSubtitleContent()
+
   return (
     <div className="ringle-call">
       {/* Main Call Area */}
@@ -274,15 +295,22 @@ function Call() {
         {/* Call Timer */}
         <div className="call-timer">{formatTime(callTime)}</div>
 
-        {/* Status Indicator */}
-        {isLoading && <div className="status-indicator">연결 중...</div>}
-        {isSpeaking && <div className="status-indicator speaking">AI가 말하는 중</div>}
-        {isListening && !isSpeaking && <div className="status-indicator listening">듣고 있어요</div>}
+        {/* Subtitle Display - 화면 중앙 */}
+        {subtitleMode !== 'off' && subtitleContent && (
+          <div className="subtitle-display">
+            <p className="subtitle-text">{subtitleContent}</p>
+            {subtitleMode === 'all' && currentTranslation && (
+              <p className="subtitle-translation">{currentTranslation}</p>
+            )}
+          </div>
+        )}
 
-        {/* Subtitle Area */}
-        {showSubtitles && currentSubtitle && (
-          <div className="subtitle-area">
-            <p>{currentSubtitle}</p>
+        {/* Speaking Indicator */}
+        {isSpeaking && (
+          <div className="speaking-indicator">
+            <div className="dot-wave">
+              <span></span><span></span><span></span><span></span><span></span>
+            </div>
           </div>
         )}
       </div>
@@ -304,8 +332,8 @@ function Call() {
           </button>
 
           <button
-            className={`control-btn ${showSubtitles ? 'active' : ''}`}
-            onClick={() => setShowSubtitles(!showSubtitles)}
+            className={`control-btn ${subtitleMode !== 'off' ? 'active' : ''}`}
+            onClick={() => setShowSubtitleModal(true)}
           >
             <Captions size={24} />
             <span>모두 보기</span>
@@ -320,6 +348,34 @@ function Call() {
         </button>
       </div>
 
+      {/* 자막 설정 바텀시트 모달 */}
+      {showSubtitleModal && (
+        <div className="modal-overlay" onClick={() => setShowSubtitleModal(false)}>
+          <div className="subtitle-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>자막 설정</h3>
+              <button className="close-btn" onClick={() => setShowSubtitleModal(false)}>
+                <X size={24} color="#9ca3af" />
+              </button>
+            </div>
+            <div className="modal-options">
+              {SUBTITLE_OPTIONS.map(option => (
+                <button
+                  key={option.id}
+                  className={`option-item ${subtitleMode === option.id ? 'selected' : ''}`}
+                  onClick={() => {
+                    setSubtitleMode(option.id)
+                    setShowSubtitleModal(false)
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         .ringle-call {
           min-height: 100vh;
@@ -333,9 +389,7 @@ function Call() {
           display: flex;
           flex-direction: column;
           align-items: center;
-          justify-content: center;
-          padding: 40px 20px;
-          position: relative;
+          padding: 60px 20px 20px;
         }
 
         .tutor-avatar {
@@ -366,46 +420,58 @@ function Call() {
           font-size: 18px;
           color: rgba(255, 255, 255, 0.6);
           font-variant-numeric: tabular-nums;
+          margin-bottom: 32px;
         }
 
-        .status-indicator {
-          margin-top: 40px;
-          padding: 8px 20px;
-          background: rgba(255, 255, 255, 0.1);
-          border-radius: 20px;
-          font-size: 14px;
-          color: rgba(255, 255, 255, 0.8);
+        /* 자막 표시 영역 */
+        .subtitle-display {
+          width: 100%;
+          padding: 0 20px;
+          text-align: left;
         }
 
-        .status-indicator.speaking {
-          background: rgba(139, 92, 246, 0.3);
-        }
-
-        .status-indicator.listening {
-          background: rgba(34, 197, 94, 0.3);
-          animation: pulse 1.5s infinite;
-        }
-
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.6; }
-        }
-
-        .subtitle-area {
-          position: absolute;
-          bottom: 200px;
-          left: 20px;
-          right: 20px;
-          background: rgba(0, 0, 0, 0.7);
-          border-radius: 12px;
-          padding: 16px 20px;
-        }
-
-        .subtitle-area p {
+        .subtitle-text {
           color: white;
-          font-size: 16px;
+          font-size: 22px;
+          font-weight: 500;
           line-height: 1.5;
-          text-align: center;
+          margin-bottom: 8px;
+        }
+
+        .subtitle-translation {
+          color: rgba(255, 255, 255, 0.6);
+          font-size: 16px;
+          line-height: 1.4;
+        }
+
+        /* Speaking Indicator (음파 애니메이션) */
+        .speaking-indicator {
+          margin-top: 24px;
+        }
+
+        .dot-wave {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .dot-wave span {
+          width: 8px;
+          height: 8px;
+          background: rgba(255, 255, 255, 0.4);
+          border-radius: 50%;
+          animation: dotWave 1.2s infinite ease-in-out;
+        }
+
+        .dot-wave span:nth-child(1) { animation-delay: 0s; }
+        .dot-wave span:nth-child(2) { animation-delay: 0.1s; }
+        .dot-wave span:nth-child(3) { animation-delay: 0.2s; }
+        .dot-wave span:nth-child(4) { animation-delay: 0.3s; }
+        .dot-wave span:nth-child(5) { animation-delay: 0.4s; }
+
+        @keyframes dotWave {
+          0%, 60%, 100% { opacity: 0.4; transform: scale(1); }
+          30% { opacity: 1; transform: scale(1.2); }
         }
 
         /* Bottom Controls */
@@ -452,6 +518,78 @@ function Call() {
 
         .end-call-btn:active {
           transform: scale(0.95);
+        }
+
+        /* 자막 설정 모달 */
+        .modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.5);
+          display: flex;
+          align-items: flex-end;
+          justify-content: center;
+          z-index: 1000;
+        }
+
+        .subtitle-modal {
+          background: white;
+          border-radius: 24px 24px 0 0;
+          width: 100%;
+          max-width: 480px;
+          padding: 24px 0;
+          animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
+        }
+
+        .subtitle-modal .modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 0 20px 16px;
+          border-bottom: 1px solid #f3f4f6;
+        }
+
+        .subtitle-modal .modal-header h3 {
+          font-size: 18px;
+          font-weight: 600;
+          color: #1f2937;
+        }
+
+        .subtitle-modal .close-btn {
+          background: none;
+          padding: 4px;
+        }
+
+        .modal-options {
+          padding: 8px 0;
+        }
+
+        .modal-options .option-item {
+          width: 100%;
+          padding: 16px 20px;
+          text-align: left;
+          font-size: 16px;
+          color: #374151;
+          background: white;
+          border: none;
+          transition: background 0.2s;
+        }
+
+        .modal-options .option-item:hover {
+          background: #f9fafb;
+        }
+
+        .modal-options .option-item.selected {
+          background: #eff6ff;
+          color: #2563eb;
+          font-weight: 500;
         }
       `}</style>
     </div>

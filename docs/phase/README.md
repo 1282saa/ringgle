@@ -13,6 +13,7 @@ This directory contains detailed documentation for each development phase of the
 | [Phase 3](PHASE-03-tutor-settings.md) | AI Tutor Settings & Customization | ✅ Completed | 2026-01-12 |
 | [Phase 4](PHASE-04-call-analysis.md) | Call Result Analysis & CAFP Scoring | ✅ Completed | 2026-01-12 |
 | [Phase 5](PHASE-05-github-setup.md) | GitHub Repository Setup | ✅ Completed | 2026-01-12 |
+| [Phase 6](PHASE-06-settings-backend.md) | Settings Backend Integration | ✅ Completed | 2026-01-12 |
 
 ---
 
@@ -50,6 +51,12 @@ This directory contains detailed documentation for each development phase of the
 - Initial commit
 - Version control workflow
 
+### Phase 6: Settings Backend Integration
+- DynamoDB settings storage
+- save_settings / get_settings APIs
+- Cross-device settings sync
+- Offline-first with localStorage fallback
+
 ---
 
 ## Tech Stack Summary
@@ -77,6 +84,8 @@ This directory contains detailed documentation for each development phase of the
 | `tts` | Text-to-speech |
 | `stt` | Speech-to-text |
 | `analyze` | Conversation analysis |
+| `save_settings` | Save user settings to DynamoDB |
+| `get_settings` | Retrieve user settings from DynamoDB |
 
 ---
 
@@ -84,11 +93,11 @@ This directory contains detailed documentation for each development phase of the
 
 | Phase | Title | Description |
 |-------|-------|-------------|
-| Phase 6 | UI/UX Polish | Ringle-style UI improvements |
-| Phase 7 | Progress Tracking | Track learning over sessions |
-| Phase 8 | Lesson Plans | Structured learning paths |
-| Phase 9 | Mobile Deployment | App Store & Play Store |
-| Phase 10 | Analytics | Usage & performance metrics |
+| Phase 7 | UI/UX Polish | Ringle-style UI improvements |
+| Phase 8 | Progress Tracking | Track learning over sessions |
+| Phase 9 | Lesson Plans | Structured learning paths |
+| Phase 10 | Mobile Deployment | App Store & Play Store |
+| Phase 11 | Analytics | Usage & performance metrics |
 
 ---
 
