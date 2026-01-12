@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Phone, ChevronRight, Menu, Flame, Home as HomeIcon, Monitor, Bot, BarChart2, User } from 'lucide-react'
+import { TUTORS, ACCENT_LABELS } from '../constants'
 
 function Home() {
   const navigate = useNavigate()
@@ -9,28 +10,16 @@ function Home() {
 
   // 설정에서 저장된 값 로드
   const settings = JSON.parse(localStorage.getItem('tutorSettings') || '{}')
-  const accent = settings.accent || 'us'
-  const gender = settings.gender || 'female'
 
-  const accentLabel = {
-    us: '미국',
-    uk: '영국',
-    au: '호주',
-    in: '인도'
-  }[accent] || '미국'
+  // 튜터 정보 가져오기
+  const tutorId = settings.tutorId || 'gwen'
+  const tutor = TUTORS.find(t => t.id === tutorId) || TUTORS[0]
 
-  const genderLabel = gender === 'male' ? '남성' : '여성'
-
-  // 튜터 이름 생성 (링글 스타일)
-  const tutorNames = {
-    female: ['Gwen', 'Emma', 'Olivia', 'Sophia'],
-    male: ['James', 'Liam', 'Noah', 'Oliver']
-  }
-  const tutorName = settings.tutorName || tutorNames[gender][0]
+  const tutorName = tutor.name
   const tutorInitial = tutorName[0]
-
-  // 성격 태그
-  const personalityTags = ['밝은', '활기찬']
+  const accentLabel = ACCENT_LABELS[tutor.accent] || '미국'
+  const genderLabel = tutor.gender === 'male' ? '남성' : '여성'
+  const personalityTags = tutor.tags
 
   useEffect(() => {
     // 통화 기록 로드

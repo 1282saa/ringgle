@@ -33,6 +33,7 @@ export const STORAGE_KEYS = {
   CALL_HISTORY: 'callHistory',          // 통화 기록
   LAST_CALL_RESULT: 'lastCallResult',   // 마지막 통화 결과
   LAST_FEEDBACK: 'lastFeedback',        // 마지막 피드백
+  DEVICE_ID: 'deviceId',                // 디바이스 고유 ID (UUID)
 }
 
 // ============================================
@@ -75,17 +76,31 @@ export const GENDERS = [
 ]
 
 /**
+ * 튜터 목록 (8명)
+ * 각 튜터는 이름, 성별, 억양, 성격 태그를 가짐
+ * @constant {Array<Object>}
+ */
+export const TUTORS = [
+  { id: 'gwen', name: 'Gwen', gender: 'female', accent: 'us', tags: ['밝은', '활기찬'] },
+  { id: 'chris', name: 'Chris', gender: 'male', accent: 'us', tags: ['밝은', '활기찬'] },
+  { id: 'ivy', name: 'Ivy', gender: 'female', accent: 'us', tags: ['따뜻한'] },
+  { id: 'james', name: 'James', gender: 'male', accent: 'uk', tags: ['차분한', '지적인'] },
+  { id: 'emma', name: 'Emma', gender: 'female', accent: 'uk', tags: ['친절한'] },
+  { id: 'oliver', name: 'Oliver', gender: 'male', accent: 'au', tags: ['유쾌한'] },
+  { id: 'sophia', name: 'Sophia', gender: 'female', accent: 'au', tags: ['상냥한'] },
+  { id: 'liam', name: 'Liam', gender: 'male', accent: 'us', tags: ['열정적인'] },
+]
+
+/**
  * 말하기 속도 옵션
  * @constant {Array<Object>}
  * @property {string} id - 속도 식별자
  * @property {string} label - 한글 라벨
- * @property {string} sublabel - 속도 배율
  * @property {number} rate - Web Speech API에서 사용할 속도 값
  */
 export const SPEEDS = [
-  { id: 'slow', label: '느리게', sublabel: '0.8x', rate: 0.8 },
-  { id: 'normal', label: '보통', sublabel: '1.0x', rate: 1.0 },
-  { id: 'fast', label: '빠르게', sublabel: '1.2x', rate: 1.2 },
+  { id: 'normal', label: '보통', rate: 1.0 },
+  { id: 'slow', label: '천천히', rate: 0.8 },
 ]
 
 /**
@@ -93,9 +108,17 @@ export const SPEEDS = [
  * @constant {Array<Object>}
  */
 export const LEVELS = [
-  { id: 'beginner', label: '초급', sublabel: 'Beginner' },
-  { id: 'intermediate', label: '중급', sublabel: 'Intermediate' },
-  { id: 'advanced', label: '고급', sublabel: 'Advanced' },
+  { id: 'easy', label: 'Easy' },
+  { id: 'intermediate', label: 'Intermediate' },
+]
+
+/**
+ * 통화 시간 옵션
+ * @constant {Array<Object>}
+ */
+export const DURATIONS = [
+  { id: '5', label: '5분', minutes: 5 },
+  { id: '10', label: '10분', minutes: 10 },
 ]
 
 /**
@@ -138,10 +161,12 @@ export const PERSONALITY_TAGS = ['밝은', '활기찬']
  * @constant {Object}
  */
 export const DEFAULT_SETTINGS = {
+  tutorId: 'gwen',
   accent: 'us',
   gender: 'female',
   speed: 'normal',
-  level: 'intermediate',
+  level: 'easy',
+  duration: '5',
   topic: 'business',
 }
 

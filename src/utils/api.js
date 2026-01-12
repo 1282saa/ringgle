@@ -314,3 +314,227 @@ export async function speechToText(audioBlob, language = 'en-US') {
     'STT'
   )
 }
+
+// ============================================
+// 세션 관리 API (DynamoDB)
+// ============================================
+
+/**
+ * 새 대화 세션 시작
+ *
+ * @param {string} deviceId - 디바이스 UUID
+ * @param {string} sessionId - 세션 UUID
+ * @param {Object} settings - 튜터 설정
+ * @param {string} tutorName - 튜터 이름
+ * @returns {Promise<Object>} 시작 결과
+ *
+ * @example
+ * await startSession(deviceId, sessionId, settings, 'Gwen')
+ */
+export async function startSession(deviceId, sessionId, settings, tutorName) {
+  return apiRequest(
+    {
+      action: 'start_session',
+      deviceId,
+      sessionId,
+      settings,
+      tutorName,
+    },
+    'StartSession'
+  )
+}
+
+/**
+ * 대화 세션 종료
+ *
+ * @param {string} deviceId - 디바이스 UUID
+ * @param {string} sessionId - 세션 UUID
+ * @param {Object} stats - 통화 통계
+ * @param {number} stats.duration - 통화 시간 (초)
+ * @param {number} stats.turnCount - 대화 턴 수
+ * @param {number} stats.wordCount - 총 단어 수
+ * @returns {Promise<Object>} 종료 결과
+ */
+export async function endSession(deviceId, sessionId, stats) {
+  return apiRequest(
+    {
+      action: 'end_session',
+      deviceId,
+      sessionId,
+      duration: stats.duration,
+      turnCount: stats.turnCount,
+      wordCount: stats.wordCount,
+    },
+    'EndSession'
+  )
+}
+
+/**
+ * 대화 메시지 저장
+ *
+ * @param {string} deviceId - 디바이스 UUID
+ * @param {string} sessionId - 세션 UUID
+ * @param {Object} message - 메시지 객체
+ * @param {string} message.role - 역할 ('user' | 'assistant')
+ * @param {string} message.content - 영어 내용
+ * @param {string} [message.translation] - 한국어 번역
+ * @param {number} message.turnNumber - 턴 번호
+ * @returns {Promise<Object>} 저장 결과
+ */
+export async function saveMessage(deviceId, sessionId, message) {
+  return apiRequest(
+    {
+      action: 'save_message',
+      deviceId,
+      sessionId,
+      message,
+    },
+    'SaveMessage'
+  )
+}
+
+/**
+ * 사용자의 대화 세션 목록 조회
+ *
+ * @param {string} deviceId - 디바이스 UUID
+ * @param {number} [limit=10] - 최대 개수
+ * @param {string} [lastKey] - 페이지네이션 키
+ * @returns {Promise<Object>} 세션 목록
+ *
+ * @example
+ * const { sessions, hasMore, lastKey } = await getSessions(deviceId)
+ */
+export async function getSessions(deviceId, limit = 10, lastKey = null) {
+  return apiRequest(
+    {
+      action: 'get_sessions',
+      deviceId,
+      limit,
+      lastKey,
+    },
+    'GetSessions'
+  )
+}
+
+/**
+ * 특정 세션의 상세 정보 조회
+ *
+ * @param {string} deviceId - 디바이스 UUID
+ * @param {string} sessionId - 세션 UUID
+ * @returns {Promise<Object>} 세션 상세 (메시지, 분석 결과 포함)
+ *
+ * @example
+ * const { session, messages, analysis } = await getSessionDetail(deviceId, sessionId)
+ */
+export async function getSessionDetail(deviceId, sessionId) {
+  return apiRequest(
+    {
+      action: 'get_session_detail',
+      deviceId,
+      sessionId,
+    },
+    'GetSessionDetail'
+  )
+}
+
+/**
+ * 세션 삭제
+ *
+ * @param {string} deviceId - 디바이스 UUID
+ * @param {string} sessionId - 세션 UUID
+ * @returns {Promise<Object>} 삭제 결과
+ */
+export async function deleteSession(deviceId, sessionId) {
+  return apiRequest(
+    {
+      action: 'delete_session',
+      deviceId,
+      sessionId,
+    },
+    'DeleteSession'
+  )
+}
+
+/**
+ * 대화 분석 (deviceId, sessionId 포함하여 저장도 함께)
+ *
+ * @param {Array} messages - 분석할 대화 메시지 배열
+ * @param {string} [deviceId] - 디바이스 UUID (저장용)
+ * @param {string} [sessionId] - 세션 UUID (저장용)
+ * @returns {Promise<Object>} 분석 결과
+ */
+export async function analyzeConversationWithSave(messages, deviceId = null, sessionId = null) {
+  return apiRequest(
+    {
+      action: API_ACTIONS.ANALYZE,
+      messages,
+      deviceId,
+      sessionId,
+    },
+    'Analyze'
+  )
+}
+
+// ============================================
+// 사용자 설정 API
+// ============================================
+
+/**
+ * 사용자 맞춤설정을 서버에 저장
+ *
+ * @param {string} deviceId - 디바이스 UUID
+ * @param {Object} settings - 튜터 설정 객체
+ * @param {string} settings.accent - 억양 ('us' | 'uk' | 'au' | 'in')
+ * @param {string} settings.gender - 성별 ('male' | 'female')
+ * @param {string} settings.speed - 속도 ('slow' | 'normal' | 'fast')
+ * @param {string} settings.level - 난이도 ('beginner' | 'intermediate' | 'advanced')
+ * @param {string} settings.topic - 주제 ('business' | 'daily' | 'travel' | 'interview')
+ * @returns {Promise<Object>} 저장 결과
+ * @returns {boolean} return.success - 성공 여부
+ * @returns {Object} return.settings - 저장된 설정
+ * @returns {string} return.updatedAt - 업데이트 시간
+ *
+ * @example
+ * const result = await saveSettingsToServer(deviceId, {
+ *   accent: 'uk',
+ *   gender: 'male',
+ *   speed: 'normal',
+ *   level: 'intermediate',
+ *   topic: 'business'
+ * })
+ */
+export async function saveSettingsToServer(deviceId, settings) {
+  return apiRequest(
+    {
+      action: 'save_settings',
+      deviceId,
+      settings,
+    },
+    'SaveSettings'
+  )
+}
+
+/**
+ * 서버에서 사용자 맞춤설정 조회
+ *
+ * @param {string} deviceId - 디바이스 UUID
+ * @returns {Promise<Object>} 설정 조회 결과
+ * @returns {Object} return.settings - 설정 객체
+ * @returns {boolean} return.isDefault - 기본값 여부 (저장된 설정이 없는 경우 true)
+ * @returns {string} [return.updatedAt] - 마지막 업데이트 시간 (저장된 설정이 있는 경우)
+ *
+ * @example
+ * const { settings, isDefault } = await getSettingsFromServer(deviceId)
+ * if (!isDefault) {
+ *   console.log('Loaded saved settings:', settings)
+ * }
+ */
+export async function getSettingsFromServer(deviceId) {
+  return apiRequest(
+    {
+      action: 'get_settings',
+      deviceId,
+    },
+    'GetSettings'
+  )
+}
