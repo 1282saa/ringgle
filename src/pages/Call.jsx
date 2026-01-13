@@ -47,6 +47,10 @@ function Call() {
   const [currentTranslation, setCurrentTranslation] = useState('')
   const [turnCount, setTurnCount] = useState(0)
   const [wordCount, setWordCount] = useState(0)
+
+  // Refs for accurate cumulative tracking (fixes React state batching issue)
+  const turnCountRef = useRef(0)
+  const wordCountRef = useRef(0)
   const [sttMode, setSttMode] = useState('streaming') // 'streaming' | 'transcribe' | 'browser'
   const [userSpeaking, setUserSpeaking] = useState(false) // 사용자가 말하는 중인지
   const [streamingText, setStreamingText] = useState('') // 실시간 스트리밍 텍스트
@@ -783,8 +787,15 @@ function Call() {
   const handleUserSpeech = async (text) => {
     if (!text.trim()) return
 
-    const newTurnCount = turnCount + 1
-    const newWordCount = wordCount + text.split(' ').length
+    // Use refs for accurate cumulative tracking (fixes React state batching issue)
+    turnCountRef.current += 1
+    const wordsInText = text.split(' ').filter(w => w.length > 0).length
+    wordCountRef.current += wordsInText
+
+    const newTurnCount = turnCountRef.current
+    const newWordCount = wordCountRef.current
+
+    console.log('[WordCount] Added', wordsInText, 'words, total:', newWordCount, 'turn:', newTurnCount)
 
     const userMessage = {
       role: 'user',
@@ -870,9 +881,14 @@ function Call() {
       speechSynthesis.cancel()
     }
 
+    // Use ref values for accurate counts (state may be stale due to batching)
+    const finalTurnCount = turnCountRef.current
+    const finalWordCount = wordCountRef.current
+    console.log('[EndCall] Final counts - turns:', finalTurnCount, 'words:', finalWordCount)
+
     // DynamoDB에 세션 종료 기록
     try {
-      await endSession(deviceId, sessionId, callTime, turnCount, wordCount)
+      await endSession(deviceId, sessionId, callTime, finalTurnCount, finalWordCount)
       console.log('[DB] Session ended:', sessionId)
     } catch (dbErr) {
       console.error('[DB] Failed to end session:', dbErr)
@@ -882,8 +898,8 @@ function Call() {
       duration: callTime,
       messages: messages,
       date: new Date().toISOString(),
-      turnCount,
-      wordCount,
+      turnCount: finalTurnCount,
+      wordCount: finalWordCount,
       tutorName,
       sessionId // 세션 ID 추가
     }
@@ -899,8 +915,8 @@ function Call() {
       fullDate: now.toLocaleString('ko-KR'),
       duration: formatTime(callTime),
       durationSeconds: callTime,
-      words: wordCount,
-      turnCount,
+      words: finalWordCount,
+      turnCount: finalTurnCount,
       tutorName
     })
     localStorage.setItem('callHistory', JSON.stringify(history.slice(0, 50)))
