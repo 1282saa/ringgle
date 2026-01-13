@@ -379,10 +379,16 @@ function Call() {
           }
         },
         onTranscript: (text) => {
-          // 최종 확정 결과
+          // 최종 확정 결과 - 이전 텍스트에 추가 (교체 X)
           console.log('[Streaming] Final transcript:', text)
           if (text && text.trim()) {
-            finalTranscriptRef.current = text.trim()
+            // 이전 텍스트가 있으면 공백으로 연결
+            if (finalTranscriptRef.current) {
+              finalTranscriptRef.current += ' ' + text.trim()
+            } else {
+              finalTranscriptRef.current = text.trim()
+            }
+            console.log('[Streaming] Accumulated transcript:', finalTranscriptRef.current)
 
             // 최종 결과가 오면 잠시 후 처리 (추가 발화 대기)
             if (silenceAfterSpeechTimerRef.current) {
@@ -394,7 +400,7 @@ function Call() {
                 finalTranscriptRef.current = ''
                 processStreamingResult(finalText)
               }
-            }, 1200) // 1.2초 대기 후 처리
+            }, 1500) // 1.5초 대기 후 처리 (더 긴 발화 대기)
           }
         },
         onError: (error) => {
