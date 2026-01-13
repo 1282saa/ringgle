@@ -240,17 +240,21 @@ export function getKoreanDateTime() {
 
 /**
  * 디바이스 고유 ID 가져오기
- * 없으면 새로 생성하여 저장
+ * 테스트 버전: 고정 deviceId 사용
  *
  * @returns {string} UUID 형식의 디바이스 ID
  */
 export function getDeviceId() {
-  let deviceId = localStorage.getItem(STORAGE_KEYS.DEVICE_ID)
-  if (!deviceId) {
-    deviceId = crypto.randomUUID()
-    localStorage.setItem(STORAGE_KEYS.DEVICE_ID, deviceId)
-  }
-  return deviceId
+  // 테스트용 고정 deviceId (프로덕션에서는 아래 주석 해제)
+  return '69e617f8-8caf-4d40-9959-bca37f169e2c'
+
+  // --- 프로덕션용 코드 (나중에 활성화) ---
+  // let deviceId = localStorage.getItem(STORAGE_KEYS.DEVICE_ID)
+  // if (!deviceId) {
+  //   deviceId = crypto.randomUUID()
+  //   localStorage.setItem(STORAGE_KEYS.DEVICE_ID, deviceId)
+  // }
+  // return deviceId
 }
 
 // ============================================
