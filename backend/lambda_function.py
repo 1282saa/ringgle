@@ -6,7 +6,7 @@ import time
 import urllib.request
 import hashlib
 import hmac
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 # AWS 클라이언트
@@ -44,8 +44,9 @@ def get_ttl():
 
 
 def get_now():
-    """현재 UTC 시간을 ISO 포맷으로 반환"""
-    return datetime.utcnow().isoformat() + 'Z'
+    """현재 한국시간(KST)을 ISO 포맷으로 반환"""
+    KST = timezone(timedelta(hours=9))
+    return datetime.now(KST).isoformat()
 
 
 def make_response(status_code, body):
