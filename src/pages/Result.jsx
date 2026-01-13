@@ -33,16 +33,35 @@ function Result() {
       const response = await analyzeConversation(result.messages)
       if (response.analysis) {
         setAnalysis(response.analysis)
+        // 분석 완료 후 Analysis 페이지로 이동
+        navigate('/analysis', {
+          state: {
+            callData: {
+              ...result,
+              analysis: response.analysis
+            }
+          }
+        })
       }
     } catch (err) {
       console.error('Analysis failed:', err)
-      setAnalysis({
+      const fallbackAnalysis = {
         cafp_scores: { complexity: 70, accuracy: 75, fluency: 72, pronunciation: 78 },
         fillers: { count: 0, words: [], percentage: 0 },
         grammar_corrections: [],
         vocabulary: { total_words: 0, unique_words: 0, advanced_words: [], suggested_words: [] },
         overall_feedback: '대화를 완료하셨습니다!',
         improvement_tips: []
+      }
+      setAnalysis(fallbackAnalysis)
+      // 폴백 데이터로도 Analysis 페이지 이동
+      navigate('/analysis', {
+        state: {
+          callData: {
+            ...result,
+            analysis: fallbackAnalysis
+          }
+        }
       })
     } finally {
       setIsAnalyzing(false)

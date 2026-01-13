@@ -30,7 +30,60 @@ function Analysis() {
 
   useEffect(() => {
     if (callData?.analysis) {
-      setAnalysis(callData.analysis)
+      // API 응답 형식(snake_case)을 UI 형식으로 변환
+      const rawAnalysis = callData.analysis
+
+      // CAFP 점수 변환 (0-100 → 0-9 레벨)
+      const transformCafpScores = (scores) => {
+        if (!scores) return {}
+        const toLevel = (score) => Math.round((score / 100) * 9)
+        const toScore = (score) => (score / 100) * 9
+        return {
+          complexity: { score: toScore(scores.complexity || 0), level: toLevel(scores.complexity || 0) },
+          accuracy: { score: toScore(scores.accuracy || 0), level: toLevel(scores.accuracy || 0) },
+          fluency: { score: toScore(scores.fluency || 0), level: toLevel(scores.fluency || 0) },
+          pronunciation: { score: toScore(scores.pronunciation || 0), level: toLevel(scores.pronunciation || 0), isBeta: true }
+        }
+      }
+
+      // 필러워드 변환
+      const transformFillers = (fillers) => {
+        if (!fillers || fillers.count === 0) return null
+        return {
+          count: fillers.count || 0,
+          instances: fillers.words?.map(word => ({
+            text: `You used "${word}" frequently`,
+            highlights: [word]
+          })) || []
+        }
+      }
+
+      // 문법 실수 변환
+      const transformGrammar = (corrections) => {
+        if (!corrections || corrections.length === 0) return null
+        return {
+          count: corrections.length,
+          category: '문법',
+          instances: corrections.map(c => ({
+            original: c.original,
+            error: c.original,
+            corrected: c.corrected,
+            explanation: c.explanation
+          }))
+        }
+      }
+
+      const transformed = {
+        cafpScores: transformCafpScores(rawAnalysis.cafp_scores),
+        summary: rawAnalysis.overall_feedback,
+        fillers: transformFillers(rawAnalysis.fillers),
+        grammarMistakes: transformGrammar(rawAnalysis.grammar_corrections),
+        repetitiveWords: null, // API에서 제공하지 않음
+        improvementTips: rawAnalysis.improvement_tips,
+        vocabulary: rawAnalysis.vocabulary
+      }
+
+      setAnalysis(transformed)
     }
   }, [callData])
 
