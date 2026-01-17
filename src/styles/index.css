@@ -1,0 +1,7 @@
+/**
+ * 스타일 진입점
+ * App.css에서 이 파일을 import
+ */
+
+@import './variables.css';
+@import './common.css';

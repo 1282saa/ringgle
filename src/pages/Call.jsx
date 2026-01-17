@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { Mic, MicOff, Volume2, VolumeX, Captions, X } from 'lucide-react'
 import { sendMessage, textToSpeech, playAudioBase64, speechToText, startSession, endSession, saveMessage, translateText } from '../utils/api'
 import { getDeviceId } from '../utils/helpers'
+import { haptic } from '../utils/capacitor'
 import { TranscribeStreamingClient } from '../utils/transcribeStreaming'
+import { useUserSettings } from '../context'
 
 // 자막 설정 옵션
 const SUBTITLE_OPTIONS = [
@@ -51,7 +53,7 @@ function Call() {
   // Refs for accurate cumulative tracking (fixes React state batching issue)
   const turnCountRef = useRef(0)
   const wordCountRef = useRef(0)
-  const [sttMode, setSttMode] = useState('streaming') // 'streaming' | 'transcribe' | 'browser'
+  const [sttMode, setSttMode] = useState('streaming') // 'streaming' | 'transcribe'
   const [userSpeaking, setUserSpeaking] = useState(false) // 사용자가 말하는 중인지
   const [streamingText, setStreamingText] = useState('') // 실시간 스트리밍 텍스트
 
@@ -61,7 +63,6 @@ function Call() {
   const sessionStartedRef = useRef(false)
 
   const timerRef = useRef(null)
-  const recognitionRef = useRef(null)
   const audioRef = useRef(null)
   const mediaRecorderRef = useRef(null)
   const audioChunksRef = useRef([])
@@ -89,15 +90,12 @@ function Call() {
   const conversationStartedRef = useRef(false) // Prevent double start in StrictMode
   const audioInitializedRef = useRef(false) // Prevent double audio init in StrictMode
 
-  // 설정 로드
-  const settings = JSON.parse(localStorage.getItem('tutorSettings') || '{}')
-  const gender = settings.gender || 'female'
-  const tutorName = gender === 'male' ? 'James' : 'Gwen'
-  const tutorInitial = tutorName[0]
+  // Context에서 튜터 설정 가져오기
+  const { settings, tutorName, tutorInitial, gender } = useUserSettings()
 
   // VAD 설정
   const VAD_THRESHOLD = 15 // 음성 감지 임계값 (0-255, 낮을수록 민감)
-  const SILENCE_DURATION = 1500 // 침묵으로 판단하는 시간 (ms) - 1.5초
+  const SILENCE_DURATION = 3000 // 침묵으로 판단하는 시간 (ms) - 3초 (영어 학습자가 생각할 시간 충분히 확보)
   const MIN_SPEECH_DURATION = 500 // 최소 발화 시간 (ms) - 너무 짧은 소음 무시
   const MAX_RECORDING_TIME = 60000 // 최대 녹음 시간 60초 (안전장치)
   const maxRecordingTimerRef = useRef(null)
@@ -155,63 +153,7 @@ function Call() {
       console.log('[VAD] Audio analyser initialized')
     } catch (err) {
       console.error('[STT] Microphone access error:', err)
-      setSttMode('browser') // 마이크 접근 실패 시 브라우저 STT로 폴백
-    }
-
-    // 2. Web Speech API 초기화 (실시간 중간 결과용)
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-      recognitionRef.current = new SpeechRecognition()
-      recognitionRef.current.continuous = true
-      recognitionRef.current.interimResults = true
-      recognitionRef.current.lang = 'en-US'
-
-      recognitionRef.current.onresult = (event) => {
-        let finalTranscript = ''
-        let interim = ''
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i]
-          if (result.isFinal) {
-            finalTranscript += result[0].transcript
-          } else {
-            interim += result[0].transcript
-          }
-        }
-
-        // 중간 결과 표시 (실시간 피드백)
-        setInterimTranscript(interim || finalTranscript)
-
-        // 음성 인식 결과가 있으면 마지막 발화 시간 업데이트 (VAD 보조)
-        if (interim || finalTranscript) {
-          lastSpeechTimeRef.current = Date.now()
-          isSpeakingUserRef.current = true
-        }
-
-        // 브라우저 STT 모드에서는 최종 결과를 바로 사용 (use ref for closure safety)
-        if (sttModeRef.current === 'browser' && finalTranscript) {
-          setInterimTranscript('')
-          handleUserSpeech(finalTranscript)
-        }
-      }
-
-      recognitionRef.current.onerror = (event) => {
-        console.error('Speech recognition error:', event.error)
-        if (event.error === 'not-allowed') {
-          setSttMode('browser')
-        }
-      }
-
-      recognitionRef.current.onend = () => {
-        // 자동 재시작 (듣기 모드일 때) - use refs for closure safety
-        if (isListeningRef.current && !isMutedRef.current && !isProcessingSTTRef.current) {
-          try {
-            recognitionRef.current.start()
-          } catch (e) {
-            console.log('Recognition restart skipped')
-          }
-        }
-      }
+      setSttMode('transcribe') // 마이크 접근 실패 시 batch Transcribe로 폴백
     }
   }
 
@@ -229,9 +171,6 @@ function Call() {
       clearTimeout(silenceAfterSpeechTimerRef.current)
     }
 
-    if (recognitionRef.current) {
-      recognitionRef.current.abort()
-    }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop()
     }
@@ -482,7 +421,6 @@ function Call() {
   // AWS Transcribe Batch로 처리
   const processWithTranscribe = async (audioBlob) => {
     setIsProcessingSTT(true)
-    setInterimTranscript('음성 인식 중...')
 
     try {
       console.log('[STT] Sending audio to AWS Transcribe, size:', audioBlob.size)
@@ -503,8 +441,8 @@ function Call() {
       console.error('[STT] Transcribe error:', err)
       setIsProcessingSTT(false)
       setInterimTranscript('')
-      // Transcribe 실패 시 브라우저 STT로 폴백
-      setSttMode('browser')
+      // Transcribe 실패 시 streaming 모드로 재시도
+      setSttMode('streaming')
       startListening()
     }
   }
@@ -529,15 +467,6 @@ function Call() {
       mediaRecorderRef.current.stop()
     } else {
       console.log('[STT] MediaRecorder not recording, state:', mediaRecorderRef.current?.state)
-    }
-
-    // Web Speech API도 중지
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop()
-      } catch (e) {
-        console.log('[STT] Recognition stop error:', e)
-      }
     }
 
     setIsListening(false)
@@ -616,6 +545,16 @@ function Call() {
   }
 
   const speakText = async (text) => {
+    // 이미 재생 중인 오디오가 있으면 먼저 정지
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+      audioRef.current = null
+    }
+    if ('speechSynthesis' in window) {
+      speechSynthesis.cancel()
+    }
+
     setIsSpeaking(true)
     setCurrentSubtitle(text)
 
@@ -714,24 +653,6 @@ function Call() {
       }
     }
 
-    // Web Speech API 시작 (실시간 피드백용)
-    if (recognitionRef.current) {
-      try {
-        // 이미 실행 중이면 먼저 중지
-        recognitionRef.current.abort()
-        setTimeout(() => {
-          try {
-            recognitionRef.current.start()
-            console.log('[STT] SpeechRecognition started')
-          } catch (e) {
-            console.log('[STT] Recognition already running')
-          }
-        }, 100)
-      } catch (err) {
-        console.error('[STT] Recognition start error:', err)
-      }
-    }
-
     // VAD 모니터링 시작 (실시간 음성 감지)
     startVADMonitoring()
 
@@ -764,12 +685,6 @@ function Call() {
       clearTimeout(maxRecordingTimerRef.current)
     }
 
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop()
-      } catch (e) {}
-    }
-
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       try {
         mediaRecorderRef.current.stop()
@@ -780,6 +695,7 @@ function Call() {
   }
 
   const toggleMute = () => {
+    haptic.medium()
     if (isMuted) {
       setIsMuted(false)
       startListening()
@@ -790,6 +706,7 @@ function Call() {
   }
 
   const toggleSpeaker = () => {
+    haptic.light()
     setIsSpeakerOn(!isSpeakerOn)
     if (isSpeakerOn) {
       if (audioRef.current) {
@@ -890,6 +807,7 @@ function Call() {
   }
 
   const handleEndCall = async () => {
+    haptic.heavy() // 통화 종료는 강한 햅틱
     clearInterval(timerRef.current)
     cleanupAudio()
 
@@ -987,38 +905,6 @@ function Call() {
           </div>
         )}
 
-        {/* Processing Indicator */}
-        {isProcessingSTT && (
-          <div className="processing-indicator">
-            <div className="spinner"></div>
-            <span>음성 인식 중...</span>
-          </div>
-        )}
-
-        {/* 사용자 음성 인식 중간 결과 */}
-        {isListening && interimTranscript && !isProcessingSTT && (
-          <div className="interim-transcript">
-            <p>{interimTranscript}</p>
-          </div>
-        )}
-
-        {/* User Speaking Indicator */}
-        {isListening && userSpeaking && !isProcessingSTT && (
-          <div className="user-speaking-indicator">
-            <div className="sound-waves">
-              <span></span><span></span><span></span><span></span><span></span>
-            </div>
-            <span>말씀하세요...</span>
-          </div>
-        )}
-
-        {/* Listening Indicator */}
-        {isListening && !userSpeaking && !interimTranscript && !isProcessingSTT && (
-          <div className="listening-indicator">
-            <div className="pulse-ring"></div>
-            <span>듣고 있습니다...</span>
-          </div>
-        )}
       </div>
 
       {/* Bottom Controls */}
@@ -1042,7 +928,10 @@ function Call() {
 
           <button
             className={`control-btn ${subtitleMode !== 'off' ? 'active' : ''}`}
-            onClick={() => setShowSubtitleModal(true)}
+            onClick={() => {
+              haptic.light()
+              setShowSubtitleModal(true)
+            }}
           >
             <Captions size={24} />
             <span>{SUBTITLE_BUTTON_LABELS[subtitleMode]}</span>
@@ -1073,6 +962,7 @@ function Call() {
                   key={option.id}
                   className={`option-item ${subtitleMode === option.id ? 'selected' : ''}`}
                   onClick={() => {
+                    haptic.selection()
                     setSubtitleMode(option.id)
                     setShowSubtitleModal(false)
                   }}
@@ -1102,18 +992,18 @@ function Call() {
         }
 
         .tutor-avatar {
-          width: 100px;
-          height: 100px;
+          width: 72px;
+          height: 72px;
           background: #8b5cf6;
           border-radius: 50%;
           display: flex;
           align-items: center;
           justify-content: center;
-          margin-bottom: 20px;
+          margin-bottom: 16px;
         }
 
         .tutor-avatar span {
-          font-size: 40px;
+          font-size: 28px;
           font-weight: 600;
           color: white;
         }

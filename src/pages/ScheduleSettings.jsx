@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, ChevronRight, X } from 'lucide-react'
 import { getFromStorage, setToStorage } from '../utils/helpers'
+import { notificationService } from '../services/notificationService'
 
 const DAYS = [
   { id: 'sunday', label: '일요일', labelEn: 'Sunday', short: '일' },
@@ -57,7 +58,7 @@ function ScheduleSettings() {
     }
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const newSchedules = { ...schedules }
     if (!newSchedules[editingDay]) {
       newSchedules[editingDay] = []
@@ -72,9 +73,12 @@ function ScheduleSettings() {
     setSchedules(newSchedules)
     setToStorage('callSchedules', newSchedules)
     setShowModal(false)
+
+    // 알림 리마인더 동기화
+    await notificationService.syncReminders()
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (editingIndex === null) return
     const newSchedules = { ...schedules }
     newSchedules[editingDay].splice(editingIndex, 1)
@@ -84,6 +88,9 @@ function ScheduleSettings() {
     setSchedules(newSchedules)
     setToStorage('callSchedules', newSchedules)
     setShowModal(false)
+
+    // 알림 리마인더 동기화
+    await notificationService.syncReminders()
   }
 
   return (
@@ -92,7 +99,7 @@ function ScheduleSettings() {
       <header className="page-header">
         <h1>일정 설정</h1>
         <button className="close-btn" onClick={() => navigate(-1)}>
-          <X size={24} color="#1a1a1a" />
+          <X size={24} color="#6b7280" />
         </button>
       </header>
 
@@ -108,7 +115,7 @@ function ScheduleSettings() {
             <div className="day-row">
               <span className="day-name">{day.label}</span>
               <button className="add-btn" onClick={() => openAddModal(day.id)}>
-                <Plus size={22} color="#6366f1" />
+                <Plus size={22} color="#9ca3af" />
               </button>
             </div>
 
@@ -140,10 +147,6 @@ function ScheduleSettings() {
         ))}
       </div>
 
-      {/* 타임존 */}
-      <div className="timezone-info">
-        <span>Asia/Seoul</span>
-      </div>
 
       {/* 일정 추가/수정 모달 */}
       {showModal && (
@@ -197,7 +200,7 @@ function ScheduleSettings() {
       <style>{`
         .schedule-settings-page {
           min-height: 100vh;
-          background: #f7f7f8;
+          background: #ffffff;
           display: flex;
           flex-direction: column;
         }
@@ -266,16 +269,16 @@ function ScheduleSettings() {
         .schedule-item {
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          padding: 14px 0 14px 20px;
-          border-bottom: 1px solid #f0f0f0;
+          justify-content: flex-end;
+          padding: 12px 0;
           cursor: pointer;
+          gap: 8px;
         }
 
         .schedule-info {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 10px;
         }
 
         .type-badge {
@@ -286,22 +289,10 @@ function ScheduleSettings() {
         }
 
         .schedule-time {
-          font-size: 15px;
+          font-size: 16px;
           color: #1a1a1a;
-          font-weight: 500;
-        }
-
-        .timezone-info {
-          padding: 16px 20px;
-          text-align: center;
-          background: linear-gradient(135deg, #e0e7ff 0%, #dbeafe 100%);
-          margin-top: auto;
-        }
-
-        .timezone-info span {
-          font-size: 14px;
-          color: #4b5563;
-          font-weight: 500;
+          font-weight: 600;
+          letter-spacing: 0.5px;
         }
 
         /* 모달 */
@@ -359,19 +350,19 @@ function ScheduleSettings() {
         .type-option {
           flex: 1;
           padding: 14px;
-          border: 1.5px solid #e0e0e0;
-          border-radius: 12px;
+          border: 1.5px solid #e5e7eb;
+          border-radius: 24px;
           font-size: 15px;
           font-weight: 500;
-          color: #666;
+          color: #6b7280;
           background: white;
           transition: all 0.2s;
         }
 
         .type-option.selected {
-          border-color: #6366f1;
-          color: #6366f1;
-          background: #f5f3ff;
+          border-color: transparent;
+          color: #1f2937;
+          background: #e0e7ff;
         }
 
         .time-picker-wrap {
@@ -380,23 +371,26 @@ function ScheduleSettings() {
 
         .time-picker {
           width: 100%;
-          padding: 16px;
-          border: 1.5px solid #e0e0e0;
+          padding: 20px 16px;
+          border: none;
           border-radius: 12px;
-          font-size: 18px;
+          font-size: 20px;
+          font-weight: 500;
           text-align: center;
           box-sizing: border-box;
+          background: #f3f4f6;
+          color: #1a1a1a;
         }
 
         .time-picker:focus {
-          border-color: #6366f1;
           outline: none;
+          background: #e5e7eb;
         }
 
         .primary-btn {
           width: 100%;
           padding: 16px;
-          background: #6366f1;
+          background: #4338ca;
           color: white;
           border-radius: 12px;
           font-size: 16px;
@@ -405,14 +399,14 @@ function ScheduleSettings() {
         }
 
         .primary-btn:active {
-          background: #4f46e5;
+          background: #3730a3;
         }
 
         .delete-btn {
           width: 100%;
           padding: 14px;
           background: none;
-          color: #ef4444;
+          color: #374151;
           font-size: 15px;
           font-weight: 500;
         }

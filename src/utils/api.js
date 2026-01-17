@@ -11,7 +11,7 @@
  * 모든 API는 단일 Lambda 엔드포인트를 통해 action 파라미터로 구분됩니다.
  */
 
-import { API_URL, SPEEDS } from '../constants'
+import { API_URL, FCM_API_URL, SPEEDS } from '../constants'
 import { getTutorSettings } from './helpers'
 
 // ============================================
@@ -229,6 +229,18 @@ export async function textToSpeech(text, settings = null) {
 export function playAudioBase64(base64Audio, audioRef = null) {
   return new Promise((resolve, reject) => {
     try {
+      // 이전 오디오가 있으면 먼저 정지
+      if (audioRef?.current) {
+        audioRef.current.pause()
+        audioRef.current.currentTime = 0
+        audioRef.current = null
+      }
+
+      // 브라우저 TTS도 정지 (혹시 재생 중이면)
+      if ('speechSynthesis' in window) {
+        speechSynthesis.cancel()
+      }
+
       const audio = new Audio(`data:audio/mpeg;base64,${base64Audio}`)
 
       // audioRef가 제공되면 참조 저장 (정지 가능하도록)
@@ -582,5 +594,133 @@ export async function getTranscribeStreamingUrl(language = 'en-US', sampleRate =
       sampleRate,
     },
     'GetTranscribeUrl'
+  )
+}
+
+// ============================================
+// 오디오 녹음 저장 API
+// ============================================
+
+/**
+ * 사용자 녹음 오디오를 S3에 업로드
+ *
+ * @param {Blob} audioBlob - 녹음된 오디오 Blob
+ * @param {string} sessionId - 세션 ID
+ * @param {number} practiceIndex - 연습 인덱스
+ * @returns {Promise<Object>} 업로드 결과
+ * @returns {string} return.audioUrl - S3 URL
+ * @returns {string} return.audioKey - S3 key
+ *
+ * @example
+ * const result = await uploadPracticeAudio(audioBlob, sessionId, 0)
+ * console.log(result.audioUrl)
+ */
+export async function uploadPracticeAudio(audioBlob, sessionId, practiceIndex) {
+  const base64Audio = await blobToBase64(audioBlob)
+
+  return apiRequest(
+    {
+      action: 'upload_practice_audio',
+      audio: base64Audio,
+      sessionId,
+      practiceIndex,
+      timestamp: Date.now(),
+    },
+    'UploadPracticeAudio'
+  )
+}
+
+/**
+ * 연습 결과 저장 (메타데이터)
+ *
+ * @param {string} deviceId - 디바이스 UUID
+ * @param {string} sessionId - 세션 ID
+ * @param {Object} practiceData - 연습 데이터
+ * @returns {Promise<Object>} 저장 결과
+ */
+export async function savePracticeResult(deviceId, sessionId, practiceData) {
+  return apiRequest(
+    {
+      action: 'save_practice_result',
+      deviceId,
+      sessionId,
+      practiceData,
+    },
+    'SavePracticeResult'
+  )
+}
+
+// ============================================
+// FCM 푸시 알림 API
+// ============================================
+
+/**
+ * FCM API 요청 공통 함수
+ * @private
+ */
+async function fcmApiRequest(body, actionName) {
+  try {
+    const response = await fetch(FCM_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    })
+
+    if (!response.ok) {
+      throw new Error(`${actionName} API error: ${response.status}`)
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error(`[FCM API] ${actionName} Error:`, error)
+    throw error
+  }
+}
+
+/**
+ * FCM 토큰을 서버에 등록
+ * 푸시 알림을 받기 위해 필요
+ *
+ * @param {string} deviceId - 디바이스 UUID
+ * @param {string} fcmToken - Firebase Cloud Messaging 토큰
+ * @param {string} [platform='android'] - 플랫폼 ('android' | 'ios')
+ * @returns {Promise<Object>} 등록 결과
+ *
+ * @example
+ * await registerFcmToken(deviceId, fcmToken, 'android')
+ */
+export async function registerFcmToken(deviceId, fcmToken, platform = 'android') {
+  return fcmApiRequest(
+    {
+      action: 'register_fcm_token',
+      deviceId,
+      fcmToken,
+      platform,
+    },
+    'RegisterFcmToken'
+  )
+}
+
+/**
+ * 푸시 알림 전송 요청 (테스트용)
+ *
+ * @param {string} deviceId - 대상 디바이스 UUID
+ * @param {string} title - 알림 제목
+ * @param {string} body - 알림 내용
+ * @param {Object} [data] - 추가 데이터
+ * @returns {Promise<Object>} 전송 결과
+ */
+export async function sendPushNotification(deviceId, title, body, data = {}) {
+  return fcmApiRequest(
+    {
+      action: 'send_push',
+      deviceId,
+      title,
+      body,
+      data,
+    },
+    'SendPush'
   )
 }

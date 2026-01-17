@@ -192,7 +192,7 @@ function Analysis() {
     return (
       <div className="analysis-error">
         <p>이 대화는 AI 분석이 불가능합니다.</p>
-        <p className="sub">150단어 이상 발화해야 분석이 가능합니다.</p>
+        <p className="sub">30단어 이상 발화해야 분석이 가능합니다.</p>
         <button onClick={() => navigate('/', { state: { activeTab: 'history' } })}>돌아가기</button>
       </div>
     )
@@ -458,6 +458,19 @@ function Analysis() {
                   </div>
                 ))}
               </div>
+
+              {/* 핵심 표현 연습하기 버튼 */}
+              <button
+                className="practice-btn"
+                onClick={() => navigate('/practice', {
+                  state: {
+                    corrections: grammarMistakes.instances,
+                    callData
+                  }
+                })}
+              >
+                핵심 표현 연습하기
+              </button>
             </div>
           </div>
         </div>
@@ -1128,6 +1141,29 @@ function Analysis() {
           font-size: 14px;
           color: #374151;
           line-height: 1.6;
+        }
+
+        /* Practice Button */
+        .practice-btn {
+          width: 100%;
+          margin-top: 24px;
+          padding: 16px;
+          background: #5046e4;
+          color: white;
+          font-size: 16px;
+          font-weight: 600;
+          border-radius: 12px;
+          border: none;
+          cursor: pointer;
+          transition: background 0.2s;
+        }
+
+        .practice-btn:hover {
+          background: #4338ca;
+        }
+
+        .practice-btn:active {
+          background: #3730a3;
         }
       `}</style>
     </div>

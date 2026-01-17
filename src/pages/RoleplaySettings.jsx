@@ -1,12 +1,23 @@
 /**
  * @file pages/RoleplaySettings.jsx
- * @description 롤플레잉/디스커션 알림 설정 페이지 (링글 앱 스타일)
+ * @description 롤플레잉/디스커션 알림 설정 페이지 (링글 앱 100% 동일)
  */
 
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, MessageCircle } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { getFromStorage } from '../utils/helpers'
+
+// 링글 원본과 동일한 말풍선 아이콘
+const ChatBubbleIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+    <path
+      d="M11 2C5.48 2 1 5.58 1 10c0 2.12 1.04 4.04 2.74 5.44L3 19l4.1-1.64C8.32 17.78 9.62 18 11 18c5.52 0 10-3.58 10-8s-4.48-8-10-8z"
+      fill="#6B5CE7"
+    />
+    <text x="8" y="13" fontSize="8" fill="white">:)</text>
+  </svg>
+)
 
 function RoleplaySettings() {
   const navigate = useNavigate()
@@ -43,17 +54,22 @@ function RoleplaySettings() {
         <div className="header-spacer" />
       </header>
 
-      {/* 선택된 주제 표시 (있을 경우) */}
-      {selectedRoleplay && (
-        <div className="next-topic-card">
+      {/* 선택된 주제 표시 */}
+      <div className="next-topic-card">
+        <div className="topic-left-bar" />
+        <div className="topic-content">
           <div className="topic-label">
-            <MessageCircle size={18} color="#6366f1" />
+            <ChatBubbleIcon />
             <span>다음 주제</span>
           </div>
-          <h3 className="topic-title">{selectedRoleplay.title}</h3>
-          <p className="topic-desc">{selectedRoleplay.description}</p>
+          <h3 className="topic-title">
+            {selectedRoleplay?.title || '출입국 관리소에서'}
+          </h3>
+          <p className="topic-desc">
+            {selectedRoleplay?.description || '입국 심사대에서 입국 수속과 통관 절차를 밟고 있습니다.'}
+          </p>
         </div>
-      )}
+      </div>
 
       {/* 메뉴 리스트 */}
       <div className="menu-list">
@@ -64,7 +80,7 @@ function RoleplaySettings() {
           <span className="menu-label">일정</span>
           <div className="menu-right">
             <span className="menu-value">주 {scheduleCount}회</span>
-            <ChevronRight size={20} color="#c0c0c0" />
+            <ChevronRight size={20} color="#C0C0C0" />
           </div>
         </div>
 
@@ -74,10 +90,10 @@ function RoleplaySettings() {
         >
           <span className="menu-label">롤플레잉</span>
           <div className="menu-right">
-            {selectedRoleplay && (
-              <span className="menu-value">{selectedRoleplay.category}</span>
-            )}
-            <ChevronRight size={20} color="#c0c0c0" />
+            <span className="menu-value purple">
+              {selectedRoleplay?.category || '해외여행 필수영어'}
+            </span>
+            <ChevronRight size={20} color="#C0C0C0" />
           </div>
         </div>
 
@@ -103,7 +119,7 @@ function RoleplaySettings() {
       <style>{`
         .roleplay-settings-page {
           min-height: 100vh;
-          background: #f7f7f8;
+          background: #F7F7F8;
           display: flex;
           flex-direction: column;
         }
@@ -114,6 +130,7 @@ function RoleplaySettings() {
           justify-content: space-between;
           padding: 16px 20px;
           background: white;
+          border-bottom: 1px solid #F0F0F0;
         }
 
         .page-header h1 {
@@ -133,13 +150,25 @@ function RoleplaySettings() {
           width: 32px;
         }
 
-        /* 다음 주제 카드 */
+        /* 다음 주제 카드 - 좌측 보라색 바 */
         .next-topic-card {
           margin: 20px;
-          padding: 20px;
           background: white;
           border-radius: 16px;
-          border: 1px solid #e8e8e8;
+          overflow: hidden;
+          display: flex;
+          border: 1px solid #E8E8E8;
+        }
+
+        .topic-left-bar {
+          width: 4px;
+          background: #6B5CE7;
+          flex-shrink: 0;
+        }
+
+        .topic-content {
+          padding: 20px;
+          flex: 1;
         }
 
         .topic-label {
@@ -151,13 +180,13 @@ function RoleplaySettings() {
 
         .topic-label span {
           font-size: 14px;
-          color: #6366f1;
+          color: #6B5CE7;
           font-weight: 500;
         }
 
         .topic-title {
           font-size: 18px;
-          font-weight: 600;
+          font-weight: 700;
           color: #1a1a1a;
           margin-bottom: 8px;
         }
@@ -183,10 +212,11 @@ function RoleplaySettings() {
           margin-bottom: 12px;
           cursor: pointer;
           transition: background 0.15s;
+          border: 1px solid #F0F0F0;
         }
 
         .menu-item:active:not(.disabled) {
-          background: #f9f9f9;
+          background: #F9F9F9;
         }
 
         .menu-item.disabled {
@@ -195,12 +225,12 @@ function RoleplaySettings() {
 
         .menu-label {
           font-size: 16px;
-          font-weight: 500;
+          font-weight: 600;
           color: #1a1a1a;
         }
 
         .menu-label.disabled-text {
-          color: #c0c0c0;
+          color: #C0C0C0;
         }
 
         .menu-right {
@@ -212,27 +242,32 @@ function RoleplaySettings() {
         .menu-value {
           font-size: 15px;
           color: #666;
+          font-weight: 500;
+        }
+
+        .menu-value.purple {
+          color: #6B5CE7;
         }
 
         .menu-value.disabled-text {
-          color: #c0c0c0;
+          color: #C0C0C0;
         }
 
         /* 설명 섹션 */
         .info-section {
-          padding: 20px;
+          padding: 0 20px 40px;
           margin-top: auto;
         }
 
         .info-divider {
           height: 6px;
-          background: linear-gradient(90deg, #e0e7ff 0%, #dbeafe 50%, #e0e7ff 100%);
+          background: #6B5CE7;
           margin: 0 -20px 24px;
         }
 
         .info-title {
           font-size: 16px;
-          font-weight: 600;
+          font-weight: 700;
           color: #1a1a1a;
           margin-bottom: 16px;
         }

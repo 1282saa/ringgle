@@ -1,0 +1,413 @@
+/**
+ * Home.jsx 스타일
+ * 링글 스타일 홈 화면
+ */
+
+/* Base Layout */
+.ringle-home {
+  min-height: 100vh;
+  background: #f9fafb;
+  /* Safe Area 적용 */
+  padding-bottom: env(safe-area-inset-bottom, 20px);
+}
+
+/* Header */
+.ringle-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  /* Safe Area 적용: 상단 노치/다이나믹 아일랜드 */
+  padding: 18px 20px;
+  padding-top: calc(18px + env(safe-area-inset-top, 0px));
+  padding-left: calc(20px + env(safe-area-inset-left, 0px));
+  padding-right: calc(20px + env(safe-area-inset-right, 0px));
+  background: white;
+}
+
+.ringle-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.header-icons {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+}
+
+.icon-btn {
+  background: none;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  background: white;
+  border-bottom: 1px solid #e8e8e8;
+  padding: 0 20px;
+  gap: 28px;
+}
+
+.tab {
+  padding: 16px 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: #9ca3af;
+  background: none;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.tab.active {
+  color: #1f2937;
+  font-weight: 600;
+  border-bottom-color: #1f2937;
+}
+
+/* Main Content */
+.main-content {
+  padding: 20px;
+}
+
+/* Tutor Card */
+.tutor-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 48px 32px 40px;
+  text-align: center;
+  margin-bottom: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tutor-card:active {
+  background: #f9fafb;
+}
+
+.tutor-avatar-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+
+.tutor-avatar {
+  width: 160px;
+  height: 160px;
+  background: #8b5cf6;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 8px solid #e9e5fb;
+  box-shadow: 0 0 0 1px #d4d0f0;
+}
+
+.tutor-avatar span {
+  font-size: 72px;
+  font-weight: 600;
+  color: white;
+}
+
+.tutor-tags {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.personality-tag {
+  padding: 8px 16px;
+  background: #f8f8f8;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #6b7280;
+  border: 1px solid #e8e8e8;
+}
+
+.tutor-name {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 12px;
+}
+
+.tutor-info-tags {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+
+.info-tag {
+  font-size: 16px;
+  color: #9ca3af;
+}
+
+/* Call Button */
+.call-btn {
+  width: 100%;
+  padding: 20px;
+  background: #5046e4;
+  color: white;
+  border-radius: 14px;
+  font-size: 18px;
+  font-weight: 600;
+  margin-top: 8px;
+  box-shadow: 0 4px 12px rgba(80, 70, 228, 0.3);
+}
+
+.call-btn:active {
+  background: #4338ca;
+  transform: scale(0.98);
+}
+
+/* History Section */
+.history-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Summary Card */
+.summary-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.summary-divider-line {
+  width: calc(100% + 40px);
+  margin-left: -20px;
+  height: 8px;
+  background: #f3f4f6;
+}
+
+.summary-item {
+  flex: 1;
+  text-align: center;
+}
+
+.summary-value {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  color: #6366f1;
+  margin-bottom: 6px;
+}
+
+.summary-label {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.summary-divider {
+  width: 1px;
+  height: 48px;
+  background: #e5e7eb;
+}
+
+/* Notice Banner */
+.notice-banner {
+  background: #f8f7ff;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.notice-icon {
+  font-size: 20px;
+}
+
+.notice-text {
+  flex: 1;
+}
+
+.notice-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 4px;
+}
+
+.notice-desc {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* Month Navigator */
+.month-navigator {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+}
+
+.month-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.month-arrows {
+  display: flex;
+  gap: 8px;
+}
+
+.month-arrows button {
+  background: none;
+  padding: 4px;
+  color: #6b7280;
+}
+
+/* Filter Checkbox */
+.filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.checkbox {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #d1d5db;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.checkbox.checked {
+  background: #5046e4;
+  border-color: #5046e4;
+  color: white;
+}
+
+.filter-checkbox span {
+  font-size: 14px;
+  color: #374151;
+}
+
+/* Loading Sessions */
+.loading-sessions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 20px;
+  background: white;
+  border-radius: 12px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+/* Call Card */
+.call-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.call-type-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  background: #f3f4f6;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+  margin-bottom: 10px;
+}
+
+.call-date {
+  font-size: 15px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 4px;
+}
+
+.call-words {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 16px;
+}
+
+.word-count-ok {
+  color: #1f2937;
+}
+
+.word-count-low {
+  color: #9ca3af;
+}
+
+.word-threshold {
+  color: #9ca3af;
+}
+
+/* Call Buttons */
+.call-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.call-btn-item {
+  width: 100%;
+  padding: 16px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #1f2937;
+  text-align: center;
+}
+
+.call-btn-item:active {
+  background: #f9fafb;
+}
+
+/* Empty History */
+.empty-history {
+  text-align: center;
+  padding: 60px 20px;
+  background: white;
+  border-radius: 12px;
+}
+
+.empty-icon {
+  width: 80px;
+  height: 80px;
+  background: #f3f4f6;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+}
+
+.empty-history p {
+  font-size: 16px;
+  color: #374151;
+  margin-bottom: 4px;
+}
+
+.empty-history .sub {
+  font-size: 14px;
+  color: #9ca3af;
+}

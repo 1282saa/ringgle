@@ -20,6 +20,12 @@
  */
 export const API_URL = 'https://n4o7d3c14c.execute-api.us-east-1.amazonaws.com/prod/chat'
 
+/**
+ * FCM 푸시 알림 API 엔드포인트
+ * @constant {string}
+ */
+export const FCM_API_URL = 'https://n4o7d3c14c.execute-api.us-east-1.amazonaws.com/prod/fcm'
+
 // ============================================
 // 로컬스토리지 키
 // ============================================

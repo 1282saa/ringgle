@@ -9,8 +9,9 @@
 
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronRight, X, Check, Home, Monitor, Bot, Phone, BarChart2, User, Flame, Menu } from 'lucide-react'
+import { ChevronRight, X, Check, Flame, Menu } from 'lucide-react'
 import { getFromStorage, setToStorage } from '../utils/helpers'
+import { haptic } from '../utils/capacitor'
 import { TUTORS } from '../constants'
 
 function Settings() {
@@ -66,6 +67,7 @@ function Settings() {
 
   // 이름 저장
   const handleSaveName = () => {
+    haptic.success()
     if (tempName.trim()) {
       setUserName(tempName.trim())
       setToStorage('userName', tempName.trim())
@@ -76,10 +78,17 @@ function Settings() {
 
   // 토글 핸들러
   const handleVideoReviewToggle = () => {
+    haptic.selection()
     const newValue = !videoReviewAlert
     setVideoReviewAlert(newValue)
     setToStorage('videoReviewAlert', newValue)
     displayToast(newValue ? '알림이 켜졌습니다' : '알림이 꺼졌습니다')
+  }
+
+  // 네비게이션 핸들러
+  const handleNav = (action) => {
+    haptic.light()
+    action()
   }
 
   return (
@@ -101,7 +110,7 @@ function Settings() {
       <nav className="tab-nav">
         <button
           className="tab-item"
-          onClick={() => navigate('/', { state: { activeTab: 'call' } })}
+          onClick={() => handleNav(() => navigate('/', { state: { activeTab: 'call' } }))}
         >
           전화
         </button>
@@ -112,7 +121,7 @@ function Settings() {
         </button>
         <button
           className="tab-item"
-          onClick={() => navigate('/', { state: { activeTab: 'history' } })}
+          onClick={() => handleNav(() => navigate('/', { state: { activeTab: 'history' } }))}
         >
           전화내역
         </button>
@@ -124,14 +133,14 @@ function Settings() {
         <section className="settings-section">
           <h2 className="section-label">공통 설정</h2>
           <div className="settings-list">
-            <div className="settings-item" onClick={() => navigate('/settings/schedule')}>
+            <div className="settings-item" onClick={() => handleNav(() => navigate('/settings/schedule'))}>
               <span className="item-label">일정</span>
               <div className="item-right">
                 <span className="item-value">주 {scheduleCount}회</span>
                 <ChevronRight size={20} color="#c0c0c0" />
               </div>
             </div>
-            <div className="settings-item" onClick={() => navigate('/settings/tutor')}>
+            <div className="settings-item" onClick={() => handleNav(() => navigate('/settings/tutor'))}>
               <span className="item-label">튜터</span>
               <div className="item-right">
                 <span className="item-value">{tutorName}</span>
@@ -140,10 +149,10 @@ function Settings() {
             </div>
             <div
               className="settings-item"
-              onClick={() => {
+              onClick={() => handleNav(() => {
                 setTempName(userName)
                 setShowNameModal(true)
-              }}
+              })}
             >
               <span className="item-label">내 이름</span>
               <div className="item-right">
@@ -158,7 +167,7 @@ function Settings() {
         <section className="settings-section">
           <h2 className="section-label">일반 전화</h2>
           <div className="settings-list">
-            <div className="settings-item" onClick={() => navigate('/settings/curriculum')}>
+            <div className="settings-item" onClick={() => handleNav(() => navigate('/settings/curriculum'))}>
               <span className="item-label">커리큘럼</span>
               <div className="item-right">
                 <span className="item-value">주제 {topicCount}개</span>
@@ -172,7 +181,7 @@ function Settings() {
         <section className="settings-section">
           <h2 className="section-label">그 외 전화</h2>
           <div className="settings-list">
-            <div className="settings-item" onClick={() => navigate('/settings/roleplay')}>
+            <div className="settings-item" onClick={() => handleNav(() => navigate('/settings/roleplay'))}>
               <span className="item-label">롤플레잉/디스커션 알림</span>
               <div className="item-right">
                 <ChevronRight size={20} color="#c0c0c0" />
@@ -188,35 +197,8 @@ function Settings() {
             </div>
           </div>
         </section>
-      </div>
 
-      {/* 하단 네비게이션 바 */}
-      <nav className="bottom-nav">
-        <button className="nav-item" onClick={() => navigate('/')}>
-          <Home size={24} />
-          <span>홈</span>
-        </button>
-        <button className="nav-item">
-          <Monitor size={24} />
-          <span>1:1 수업</span>
-        </button>
-        <button className="nav-item">
-          <Bot size={24} />
-          <span>AI 튜터</span>
-        </button>
-        <button className="nav-item active">
-          <Phone size={24} />
-          <span>AI 전화</span>
-        </button>
-        <button className="nav-item">
-          <BarChart2 size={24} />
-          <span>성취</span>
-        </button>
-        <button className="nav-item">
-          <User size={24} />
-          <span>마이링글</span>
-        </button>
-      </nav>
+      </div>
 
       {/* 토스트 메시지 */}
       {showToast && (
@@ -255,10 +237,10 @@ function Settings() {
       <style>{`
         .settings-page {
           min-height: 100vh;
-          background: #f7f7f8;
+          background: #ffffff;
           display: flex;
           flex-direction: column;
-          padding-bottom: 80px;
+          padding-bottom: 24px;
         }
 
         /* 상단 헤더 */
@@ -323,22 +305,22 @@ function Settings() {
 
         /* 설정 섹션 */
         .settings-section {
-          margin-bottom: 24px;
+          margin-bottom: 32px;
         }
 
         .section-label {
           font-size: 13px;
           font-weight: 600;
-          color: #888;
+          color: #1a1a1a;
           margin-bottom: 10px;
           padding-left: 4px;
           letter-spacing: -0.3px;
         }
 
         .settings-list {
-          background: white;
-          border-radius: 16px;
-          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
         }
 
         .settings-item {
@@ -346,17 +328,14 @@ function Settings() {
           align-items: center;
           justify-content: space-between;
           padding: 18px 20px;
-          border-bottom: 1px solid #f0f0f0;
+          background: #f8f7ff;
+          border-radius: 12px;
           cursor: pointer;
           transition: background 0.15s;
         }
 
-        .settings-item:last-child {
-          border-bottom: none;
-        }
-
         .settings-item:active {
-          background: #f9f9f9;
+          background: #f0eeff;
         }
 
         .item-label {
@@ -410,45 +389,10 @@ function Settings() {
           transform: translateX(20px);
         }
 
-        /* 하단 네비게이션 */
-        .bottom-nav {
-          position: fixed;
-          bottom: 0;
-          left: 0;
-          right: 0;
-          display: flex;
-          justify-content: space-around;
-          background: white;
-          border-top: 1px solid #e8e8e8;
-          padding: 8px 0 12px;
-          max-width: 480px;
-          margin: 0 auto;
-        }
-
-        .nav-item {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 4px;
-          background: none;
-          padding: 4px 8px;
-          color: #888;
-          transition: color 0.2s;
-        }
-
-        .nav-item span {
-          font-size: 11px;
-          font-weight: 500;
-        }
-
-        .nav-item.active {
-          color: #6366f1;
-        }
-
         /* 토스트 메시지 */
         .toast {
           position: fixed;
-          bottom: 100px;
+          bottom: 40px;
           left: 50%;
           transform: translateX(-50%);
           background: #1a1a1a;

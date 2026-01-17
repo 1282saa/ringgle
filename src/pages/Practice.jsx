@@ -1,62 +1,94 @@
+/**
+ * @file pages/Practice.jsx
+ * @description 핵심 표현 연습 - 링글 원본 UI 100% 재현
+ *
+ * Step 1: 설명 화면 - 교정된 표현과 설명 표시
+ * Step 2: 따라 말하기 - TTS 듣기 + 녹음
+ * Step 3: 완료
+ */
+
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Volume2, Mic, MicOff, Check, X, RefreshCw, ChevronRight } from 'lucide-react'
-import { textToSpeech, playAudioBase64 } from '../utils/api'
+import { X, ArrowLeft, Volume2, Headphones, Mic, Check } from 'lucide-react'
+import { textToSpeech, playAudioBase64, translateText, uploadPracticeAudio } from '../utils/api'
+import { getDeviceId } from '../utils/helpers'
 
 function Practice() {
   const navigate = useNavigate()
   const location = useLocation()
+
+  // location.state에서 corrections 데이터 받기
+  const { corrections: passedCorrections, callData } = location.state || {}
+
+  const [step, setStep] = useState(1) // 1: 설명, 2: 따라말하기, 3: 따라말하기 완료, 4: 대화하기, 5: 대화 완료, 6: 마무리
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [isListening, setIsListening] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  const [userRecording, setUserRecording] = useState(null) // 녹음된 오디오 blob
+  const [userRecordingUrl, setUserRecordingUrl] = useState(null) // S3 URL 또는 local blob URL
   const [userTranscript, setUserTranscript] = useState('')
-  const [showResult, setShowResult] = useState(false)
-  const [practiceComplete, setPracticeComplete] = useState(false)
-  const [scores, setScores] = useState([])
+  const [translations, setTranslations] = useState({}) // 번역 캐시
+  const [isUploading, setIsUploading] = useState(false)
+  const [practiceResults, setPracticeResults] = useState([]) // 연습 결과 저장
 
   const recognitionRef = useRef(null)
+  const audioRef = useRef(null)
+  const mediaRecorderRef = useRef(null)
+  const chunksRef = useRef([])
+
   const settings = JSON.parse(localStorage.getItem('tutorSettings') || '{}')
 
-  // 연습할 표현들 (실제로는 API에서 가져옴)
-  const [expressions] = useState([
-    {
-      id: 1,
-      original: "I go to school yesterday.",
-      corrected: "I went to school yesterday.",
-      korean: "나는 어제 학교에 갔다.",
-      tip: "과거 시제를 나타낼 때 'go'의 과거형 'went'를 사용합니다."
-    },
-    {
-      id: 2,
-      original: "She don't like coffee.",
-      corrected: "She doesn't like coffee.",
-      korean: "그녀는 커피를 좋아하지 않는다.",
-      tip: "3인칭 단수 주어(She, He, It)와 함께는 'doesn't'를 사용합니다."
-    },
-    {
-      id: 3,
-      original: "I have been to there before.",
-      corrected: "I have been there before.",
-      korean: "나는 전에 거기에 가본 적이 있다.",
-      tip: "'there'는 부사이므로 전치사 'to'가 필요없습니다."
-    },
-    {
-      id: 4,
-      original: "He is more taller than me.",
-      corrected: "He is taller than me.",
-      korean: "그는 나보다 키가 크다.",
-      tip: "'taller'는 이미 비교급이므로 'more'가 필요없습니다."
-    },
-    {
-      id: 5,
-      original: "I'm agree with you.",
-      corrected: "I agree with you.",
-      korean: "나는 당신에게 동의합니다.",
-      tip: "'agree'는 동사이므로 'be동사' 없이 사용합니다."
-    }
-  ])
+  // corrections 데이터 설정 (전달받은 데이터 또는 callData에서 추출)
+  const [corrections, setCorrections] = useState([])
 
-  const currentExpression = expressions[currentIndex]
+  useEffect(() => {
+    if (passedCorrections && passedCorrections.length > 0) {
+      setCorrections(passedCorrections)
+    } else if (callData?.analysis?.grammar_corrections) {
+      setCorrections(callData.analysis.grammar_corrections)
+    } else {
+      // 테스트용 기본 데이터
+      setCorrections([
+        {
+          original: "What's your daughter's solo, cantankerous laptop?",
+          corrected: "What do you think about your daughter's difficult laptop?",
+          explanation: "'Cantankerous'는 일반적으로 사람에게 사용되며, 노트북에 대해 이야기할 때는 'difficult'가 더 적절합니다."
+        }
+      ])
+    }
+  }, [passedCorrections, callData])
+
+  // 현재 연습할 표현
+  const currentCorrection = corrections[currentIndex]
+  const totalCount = corrections.length
+
+  // 프로그레스: 따라말하기(step 2) = 50%, 대화하기(step 4) = 100%
+  const getProgress = () => {
+    if (step === 2 || step === 3) return 50
+    if (step === 4 || step === 5) return 100
+    return 0
+  }
+  const progress = getProgress()
+
+  // 번역 가져오기
+  useEffect(() => {
+    const fetchTranslation = async () => {
+      if (currentCorrection?.corrected && !translations[currentIndex]) {
+        try {
+          const result = await translateText(currentCorrection.corrected)
+          if (result.translation) {
+            setTranslations(prev => ({
+              ...prev,
+              [currentIndex]: result.translation
+            }))
+          }
+        } catch (err) {
+          console.error('Translation error:', err)
+        }
+      }
+    }
+    fetchTranslation()
+  }, [currentIndex, currentCorrection, translations])
 
   // Speech Recognition 초기화
   useEffect(() => {
@@ -64,29 +96,21 @@ function Practice() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
       recognitionRef.current = new SpeechRecognition()
       recognitionRef.current.continuous = false
-      recognitionRef.current.interimResults = true
+      recognitionRef.current.interimResults = false
       recognitionRef.current.lang = 'en-US'
 
       recognitionRef.current.onresult = (event) => {
-        const current = event.resultIndex
-        const result = event.results[current]
-        const text = result[0].transcript
-
+        const text = event.results[0][0].transcript
         setUserTranscript(text)
-
-        if (result.isFinal) {
-          setIsListening(false)
-          evaluatePronunciation(text)
-        }
+        setIsRecording(false)
       }
 
-      recognitionRef.current.onerror = (event) => {
-        console.error('Speech recognition error:', event.error)
-        setIsListening(false)
+      recognitionRef.current.onerror = () => {
+        setIsRecording(false)
       }
 
       recognitionRef.current.onend = () => {
-        setIsListening(false)
+        setIsRecording(false)
       }
     }
 
@@ -97,649 +121,950 @@ function Practice() {
     }
   }, [])
 
-  const playExpression = async () => {
+  // 문장 듣기 (TTS)
+  const handleListenSentence = async () => {
+    if (isPlaying || !currentCorrection) return
+
     setIsPlaying(true)
     try {
-      const ttsResponse = await textToSpeech(currentExpression.corrected, settings)
+      const ttsResponse = await textToSpeech(currentCorrection.corrected, settings)
       if (ttsResponse.audio) {
-        await playAudioBase64(ttsResponse.audio)
+        const audio = new Audio(`data:audio/mp3;base64,${ttsResponse.audio}`)
+        audioRef.current = audio
+        audio.onended = () => setIsPlaying(false)
+        audio.play()
       }
     } catch (err) {
       // Fallback to browser TTS
       if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(currentExpression.corrected)
+        const utterance = new SpeechSynthesisUtterance(currentCorrection.corrected)
         utterance.lang = 'en-US'
         utterance.rate = 0.9
         utterance.onend = () => setIsPlaying(false)
         speechSynthesis.speak(utterance)
-        return
+      } else {
+        setIsPlaying(false)
       }
     }
-    setIsPlaying(false)
   }
 
-  const startListening = () => {
-    if (recognitionRef.current) {
+  // 내 발음 듣기
+  const handleListenMyVoice = () => {
+    if (userRecordingUrl) {
+      const audio = new Audio(userRecordingUrl)
+      audio.play()
+    }
+  }
+
+  // 마이크 토글
+  const handleMicToggle = async () => {
+    if (isRecording) {
+      // 녹음 중지
+      if (recognitionRef.current) {
+        recognitionRef.current.stop()
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop()
+      }
+      setIsRecording(false)
+    } else {
+      // 녹음 시작
       setUserTranscript('')
-      setShowResult(false)
-      setIsListening(true)
-      try {
-        recognitionRef.current.start()
-      } catch (err) {
-        console.error('Recognition start error:', err)
-      }
-    }
-  }
+      setUserRecording(null)
+      setIsRecording(true)
 
-  const stopListening = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop()
-      setIsListening(false)
-    }
-  }
-
-  // Levenshtein 거리 계산 함수
-  const levenshteinDistance = (str1, str2) => {
-    const m = str1.length
-    const n = str2.length
-    const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0))
-
-    for (let i = 0; i <= m; i++) dp[i][0] = i
-    for (let j = 0; j <= n; j++) dp[0][j] = j
-
-    for (let i = 1; i <= m; i++) {
-      for (let j = 1; j <= n; j++) {
-        if (str1[i - 1] === str2[j - 1]) {
-          dp[i][j] = dp[i - 1][j - 1]
-        } else {
-          dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
+      // 음성 인식 시작
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.start()
+        } catch (err) {
+          console.error('Recognition start error:', err)
         }
       }
-    }
-    return dp[m][n]
-  }
 
-  const evaluatePronunciation = (text) => {
-    // 텍스트 정규화
-    const normalize = (str) => str.toLowerCase()
-      .replace(/[.,!?']/g, '')
-      .replace(/\s+/g, ' ')
-      .trim()
+      // 오디오 녹음 시작
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        const mediaRecorder = new MediaRecorder(stream)
+        mediaRecorderRef.current = mediaRecorder
+        chunksRef.current = []
 
-    const target = normalize(currentExpression.corrected)
-    const spoken = normalize(text)
+        mediaRecorder.ondataavailable = (e) => {
+          chunksRef.current.push(e.data)
+        }
 
-    // 1. 문자 단위 Levenshtein 유사도 (40% 가중치)
-    const charDistance = levenshteinDistance(target, spoken)
-    const maxCharLen = Math.max(target.length, spoken.length)
-    const charSimilarity = maxCharLen > 0 ? (1 - charDistance / maxCharLen) * 100 : 0
+        mediaRecorder.onstop = async () => {
+          const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+          setUserRecording(blob)
 
-    // 2. 단어 순서 고려 유사도 (60% 가중치)
-    const targetWords = target.split(' ')
-    const spokenWords = spoken.split(' ')
+          // 로컬 URL 생성 (즉시 재생 가능하도록)
+          const localUrl = URL.createObjectURL(blob)
+          setUserRecordingUrl(localUrl)
 
-    let orderScore = 0
-    let matchedWords = 0
+          stream.getTracks().forEach(track => track.stop())
 
-    targetWords.forEach((word, index) => {
-      const spokenIndex = spokenWords.indexOf(word)
-      if (spokenIndex !== -1) {
-        matchedWords++
-        // 위치가 가까울수록 높은 점수
-        const positionDiff = Math.abs(index - spokenIndex)
-        const positionScore = Math.max(0, 1 - positionDiff / targetWords.length)
-        orderScore += positionScore
+          // S3 업로드 (백그라운드)
+          try {
+            setIsUploading(true)
+            const sessionId = callData?.id || `practice-${Date.now()}`
+            const result = await uploadPracticeAudio(blob, sessionId, currentIndex)
+
+            if (result.audioUrl) {
+              setUserRecordingUrl(result.audioUrl)
+              console.log('Audio uploaded to S3:', result.audioUrl)
+            }
+          } catch (err) {
+            console.error('S3 upload failed, using local blob:', err)
+            // 업로드 실패해도 로컬 blob URL로 재생 가능
+          } finally {
+            setIsUploading(false)
+          }
+        }
+
+        mediaRecorder.start()
+      } catch (err) {
+        console.error('Audio recording error:', err)
       }
-    })
-
-    const wordMatchRate = targetWords.length > 0 ? (matchedWords / targetWords.length) * 100 : 0
-    const orderBonus = targetWords.length > 0 ? (orderScore / targetWords.length) * 20 : 0
-
-    // 최종 점수 계산 (문자 유사도 40% + 단어 매칭 60% + 순서 보너스)
-    const accuracy = Math.min(100, Math.round(
-      charSimilarity * 0.4 + wordMatchRate * 0.6 + orderBonus
-    ))
-
-    setScores(prev => [...prev, accuracy])
-    setShowResult(true)
-  }
-
-  const nextExpression = () => {
-    if (currentIndex < expressions.length - 1) {
-      setCurrentIndex(prev => prev + 1)
-      setUserTranscript('')
-      setShowResult(false)
-    } else {
-      setPracticeComplete(true)
     }
   }
 
-  const retryExpression = () => {
-    setUserTranscript('')
-    setShowResult(false)
+  // 다음 버튼 핸들러
+  const handleNext = () => {
+    if (step === 1) {
+      // 설명 → 따라말하기
+      setStep(2)
+    } else if (step === 2) {
+      // 따라말하기 완료 → 잘했어요 바텀시트
+      setStep(3)
+    } else if (step === 3) {
+      // 잘했어요 → 대화하기
+      setUserTranscript('')
+      setUserRecording(null)
+      setUserRecordingUrl(null)
+      setStep(4)
+    } else if (step === 4) {
+      // 대화하기 완료 시 결과 저장
+      const result = {
+        index: currentIndex,
+        original: currentCorrection.original,
+        corrected: currentCorrection.corrected,
+        userTranscript,
+        audioUrl: userRecordingUrl,
+        timestamp: Date.now()
+      }
+      setPracticeResults(prev => [...prev, result])
+      // 대화하기 완료 → 잘했어요 바텀시트 (최종)
+      setStep(5)
+    } else if (step === 5) {
+      // 대화 완료 잘했어요 → 마무리 or 다음 표현
+      if (currentIndex < totalCount - 1) {
+        // 다음 표현으로
+        setCurrentIndex(prev => prev + 1)
+        setStep(1)
+        setUserTranscript('')
+        setUserRecording(null)
+        setUserRecordingUrl(null)
+      } else {
+        // 마지막 표현 완료 → 마무리 화면
+        setStep(6)
+      }
+    } else if (step === 6) {
+      // 마무리 → 전화내역으로
+      savePracticeToHistory()
+      navigate('/', { state: { activeTab: 'history' } })
+    }
   }
 
-  const getAccuracyColor = (score) => {
-    if (score >= 80) return '#22c55e'
-    if (score >= 60) return '#f59e0b'
-    return '#ef4444'
+  // 연습 결과를 localStorage에 저장
+  const savePracticeToHistory = () => {
+    try {
+      const deviceId = getDeviceId()
+      const historyKey = `practiceHistory_${deviceId}`
+      const existingHistory = JSON.parse(localStorage.getItem(historyKey) || '[]')
+
+      const newEntry = {
+        id: `practice-${Date.now()}`,
+        sessionId: callData?.id,
+        completedAt: new Date().toISOString(),
+        totalExpressions: totalCount,
+        results: practiceResults,
+      }
+
+      existingHistory.unshift(newEntry)
+
+      // 최근 50개만 유지
+      if (existingHistory.length > 50) {
+        existingHistory.splice(50)
+      }
+
+      localStorage.setItem(historyKey, JSON.stringify(existingHistory))
+      console.log('Practice history saved:', newEntry)
+    } catch (err) {
+      console.error('Failed to save practice history:', err)
+    }
   }
 
-  const averageScore = scores.length > 0
-    ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
-    : 0
+  // 닫기
+  const handleClose = () => {
+    navigate(-1)
+  }
 
-  if (practiceComplete) {
+  // 뒤로가기
+  const handleBack = () => {
+    if (step === 2) {
+      setStep(1)
+    } else if (step === 4) {
+      // 대화하기에서 뒤로 → 따라말하기 완료 상태로
+      setStep(3)
+    } else {
+      navigate(-1)
+    }
+  }
+
+  if (!currentCorrection) {
     return (
-      <div className="practice-page">
-        <header className="practice-header">
-          <button className="back-btn" onClick={() => navigate('/', { state: { activeTab: 'history' } })}>
-            <ArrowLeft size={24} />
+      <div style={styles.container}>
+        <div style={styles.emptyState}>
+          <p>연습할 표현이 없습니다.</p>
+          <button style={styles.primaryButton} onClick={() => navigate(-1)}>
+            돌아가기
           </button>
-          <h1>연습 완료</h1>
-          <div style={{ width: 24 }} />
-        </header>
-
-        <div className="complete-section">
-          <div className="complete-icon">
-            <Check size={48} color="white" />
-          </div>
-
-          <h2>훌륭해요!</h2>
-          <p>모든 표현 연습을 완료했습니다.</p>
-
-          <div className="score-summary">
-            <div className="score-circle">
-              <span className="score-number">{averageScore}</span>
-              <span className="score-label">점</span>
-            </div>
-            <p>평균 정확도</p>
-          </div>
-
-          <div className="score-breakdown">
-            {expressions.map((exp, index) => (
-              <div key={exp.id} className="score-item">
-                <span className="score-text">{exp.corrected.substring(0, 25)}...</span>
-                <span
-                  className="score-badge"
-                  style={{ background: getAccuracyColor(scores[index] || 0) }}
-                >
-                  {scores[index] || 0}%
-                </span>
-              </div>
-            ))}
-          </div>
-
-          <div className="complete-buttons">
-            <button className="btn-secondary" onClick={() => navigate('/analysis')}>
-              분석으로 돌아가기
-            </button>
-            <button className="btn-primary" onClick={() => navigate('/')}>
-              홈으로
-            </button>
-          </div>
         </div>
-
-        <style>{styles}</style>
       </div>
     )
   }
 
-  return (
-    <div className="practice-page">
-      {/* Header */}
-      <header className="practice-header">
-        <button className="back-btn" onClick={() => navigate('/', { state: { activeTab: 'history' } })}>
-          <ArrowLeft size={24} />
-        </button>
-        <h1>표현 연습</h1>
-        <span className="progress-text">
-          {currentIndex + 1} / {expressions.length}
-        </span>
-      </header>
+  const translation = translations[currentIndex] || '번역을 불러오는 중...'
 
-      {/* Progress Bar */}
-      <div className="progress-bar">
-        <div
-          className="progress-fill"
-          style={{ width: `${((currentIndex + 1) / expressions.length) * 100}%` }}
-        />
-      </div>
+  // Step 1: 설명 화면
+  if (step === 1) {
+    return (
+      <div style={styles.container}>
+        {/* Header with X button */}
+        <header style={styles.headerStep1}>
+          <div style={{ width: 24 }} />
+          <button style={styles.closeButton} onClick={handleClose}>
+            <X size={24} color="#9ca3af" />
+          </button>
+        </header>
 
-      {/* Main Content */}
-      <div className="practice-content">
-        {/* Expression Card */}
-        <div className="expression-card">
-          <div className="expression-label">올바른 표현</div>
-          <p className="expression-text">{currentExpression.corrected}</p>
-          <p className="expression-korean">{currentExpression.korean}</p>
+        {/* Title */}
+        <h1 style={styles.title}>이 표현을 짧게 연습해볼게요.</h1>
 
-          <button
-            className={`listen-btn ${isPlaying ? 'playing' : ''}`}
-            onClick={playExpression}
-            disabled={isPlaying}
-          >
-            <Volume2 size={20} />
-            {isPlaying ? '재생 중...' : '듣기'}
+        {/* Main Content */}
+        <div style={styles.content}>
+          {/* Corrected Sentence Card */}
+          <div style={styles.sentenceCard}>
+            <p style={styles.sentenceText}>{currentCorrection.corrected}</p>
+            <p style={styles.translationText}>{translation}</p>
+          </div>
+
+          {/* Explanation Box */}
+          <div style={styles.explanationBox}>
+            <p style={styles.explanationText}>
+              '{currentCorrection.original}'라는 표현은 자연스럽지 않아서, '{currentCorrection.corrected}'로 바꾸는 것이 좋습니다. {currentCorrection.explanation}
+            </p>
+          </div>
+        </div>
+
+        {/* Next Button */}
+        <div style={styles.bottomArea}>
+          <button style={styles.primaryButton} onClick={handleNext}>
+            다음
           </button>
         </div>
+      </div>
+    )
+  }
 
-        {/* Wrong Expression */}
-        <div className="wrong-card">
-          <div className="wrong-label">이렇게 말하면 안 돼요</div>
-          <p className="wrong-text">{currentExpression.original}</p>
-        </div>
-
-        {/* Tip */}
-        <div className="tip-card">
-          <span className="tip-icon">💡</span>
-          <p>{currentExpression.tip}</p>
-        </div>
-
-        {/* User Recording Section */}
-        <div className="recording-section">
-          <h3>따라 말해보세요</h3>
-
-          {userTranscript && (
-            <div className={`transcript-box ${showResult ? (scores[scores.length - 1] >= 70 ? 'success' : 'error') : ''}`}>
-              <p>{userTranscript}</p>
-              {showResult && (
-                <span className="accuracy-badge" style={{ background: getAccuracyColor(scores[scores.length - 1]) }}>
-                  {scores[scores.length - 1]}% 일치
-                </span>
-              )}
+  // Step 2: 따라 말하기
+  if (step === 2) {
+    return (
+      <div style={styles.container}>
+        {/* Header with Back and Progress */}
+        <header style={styles.headerStep2}>
+          <button style={styles.backButton} onClick={handleBack}>
+            <ArrowLeft size={24} color="#374151" />
+          </button>
+          <div style={styles.progressBarContainer}>
+            <div style={styles.progressBar}>
+              <div style={{ ...styles.progressFill, width: `${progress}%` }} />
             </div>
-          )}
+          </div>
+        </header>
 
-          {!showResult ? (
+        {/* Title */}
+        <h1 style={styles.title}>듣고 따라 말해보세요.</h1>
+
+        {/* Main Content */}
+        <div style={styles.content}>
+          {/* Sentence Card */}
+          <div style={styles.sentenceCard}>
+            <p style={styles.sentenceText}>{currentCorrection.corrected}</p>
+            <p style={styles.translationText}>{translation}</p>
+          </div>
+
+          {/* Action Buttons */}
+          <div style={styles.actionButtons}>
             <button
-              className={`mic-btn ${isListening ? 'listening' : ''}`}
-              onClick={isListening ? stopListening : startListening}
+              style={styles.actionButton}
+              onClick={handleListenSentence}
+              disabled={isPlaying}
             >
-              {isListening ? <MicOff size={28} /> : <Mic size={28} />}
+              <Volume2 size={20} color="#374151" />
+              <span style={styles.actionButtonText}>문장 듣기</span>
             </button>
-          ) : (
-            <div className="result-buttons">
-              <button className="retry-btn" onClick={retryExpression}>
-                <RefreshCw size={18} />
-                다시 하기
-              </button>
-              <button className="next-btn" onClick={nextExpression}>
-                {currentIndex < expressions.length - 1 ? '다음' : '완료'}
-                <ChevronRight size={18} />
-              </button>
+            <button
+              style={{
+                ...styles.actionButton,
+                opacity: userRecordingUrl ? 1 : 0.5
+              }}
+              onClick={handleListenMyVoice}
+              disabled={!userRecordingUrl || isUploading}
+            >
+              <Headphones size={20} color="#374151" />
+              <span style={styles.actionButtonText}>
+                {isUploading ? '저장 중...' : '내 발음 듣기'}
+              </span>
+            </button>
+          </div>
+
+          {/* User Transcript Display */}
+          {userTranscript && (
+            <div style={styles.transcriptBox}>
+              <p style={styles.transcriptText}>{userTranscript}</p>
             </div>
           )}
+        </div>
 
-          {isListening && (
-            <p className="listening-text">듣고 있어요...</p>
+        {/* Mic Button */}
+        <div style={styles.micArea}>
+          <button
+            style={{
+              ...styles.micButton,
+              background: isRecording ? '#ef4444' : '#5046e4'
+            }}
+            onClick={handleMicToggle}
+          >
+            <Mic size={28} color="white" />
+          </button>
+          {isRecording && (
+            <p style={styles.recordingText}>듣고 있어요...</p>
           )}
+        </div>
+
+        {/* Bottom Button (shows after recording) */}
+        {userTranscript && (
+          <div style={styles.bottomArea}>
+            <button style={styles.primaryButton} onClick={handleNext}>
+              다음
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Step 3: 따라말하기 완료 바텀시트
+  if (step === 3) {
+    return (
+      <div style={styles.container}>
+        {/* Header with Back and Progress */}
+        <header style={styles.headerStep2}>
+          <button style={styles.backButton} onClick={handleBack}>
+            <ArrowLeft size={24} color="#374151" />
+          </button>
+          <div style={styles.progressBarContainer}>
+            <div style={styles.progressBar}>
+              <div style={{ ...styles.progressFill, width: `${progress}%` }} />
+            </div>
+          </div>
+        </header>
+
+        {/* Title */}
+        <h1 style={styles.title}>듣고 따라 말해보세요.</h1>
+
+        {/* Main Content - Keep showing the sentence */}
+        <div style={styles.content}>
+          <div style={styles.sentenceCard}>
+            <p style={styles.sentenceText}>{currentCorrection.corrected}</p>
+            <p style={styles.translationText}>{translation}</p>
+          </div>
+        </div>
+
+        {/* Bottom Sheet Overlay */}
+        <div style={styles.bottomSheetOverlay}>
+          <div className="bottom-sheet-animated" style={styles.bottomSheet}>
+            <div style={styles.bottomSheetHeader}>
+              <div style={styles.bottomSheetIcon}>
+                <Check size={18} color="white" />
+              </div>
+              <h2 style={styles.bottomSheetTitle}>잘했어요!</h2>
+            </div>
+            <p style={styles.bottomSheetSubtitle}>다음 학습 활동을 진행해보세요.</p>
+            <button style={styles.bottomSheetButton} onClick={handleNext}>
+              다음
+            </button>
+          </div>
+        </div>
+
+        <style>{`
+          @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+          }
+          .bottom-sheet-animated {
+            animation: slideUp 0.3s ease;
+          }
+        `}</style>
+      </div>
+    )
+  }
+
+  // Step 4: 대화하기 (빈칸 채우기)
+  if (step === 4) {
+    // 빈칸 채우기를 위해 문장에서 일부 단어를 빈칸으로 만들기
+    const createFillInBlank = (sentence) => {
+      const words = sentence.split(' ')
+      if (words.length <= 3) return { display: sentence, blanks: [] }
+
+      // 중간 부분 단어들을 빈칸으로 (2-3개)
+      const blankCount = Math.min(2, Math.floor(words.length / 3))
+      const startIdx = Math.floor(words.length / 3)
+      const blanks = words.slice(startIdx, startIdx + blankCount)
+
+      const displayWords = words.map((word, idx) => {
+        if (idx >= startIdx && idx < startIdx + blankCount) {
+          return '______'
+        }
+        return word
+      })
+
+      return { display: displayWords.join(' '), blanks }
+    }
+
+    const fillInBlank = createFillInBlank(currentCorrection.corrected)
+
+    return (
+      <div style={styles.container}>
+        {/* Header with Back and Progress */}
+        <header style={styles.headerStep2}>
+          <button style={styles.backButton} onClick={handleBack}>
+            <ArrowLeft size={24} color="#374151" />
+          </button>
+          <div style={styles.progressBarContainer}>
+            <div style={styles.progressBar}>
+              <div style={{ ...styles.progressFill, width: `${progress}%` }} />
+            </div>
+          </div>
+        </header>
+
+        {/* Title */}
+        <h1 style={styles.title}>이 표현으로 대화해 보세요.</h1>
+
+        {/* Main Content */}
+        <div style={styles.content}>
+          {/* Question Card - 상단 회색 카드 */}
+          <div style={styles.questionCard}>
+            <p style={styles.questionText}>{currentCorrection.corrected}</p>
+            <p style={styles.questionTranslation}>{translation}</p>
+            <button
+              style={styles.playButton}
+              onClick={handleListenSentence}
+              disabled={isPlaying}
+            >
+              <Volume2 size={18} color="#6b7280" />
+            </button>
+          </div>
+
+          {/* Fill in the Blank Card - 하단 흰색 카드 */}
+          <div style={styles.blankCard}>
+            <p style={styles.blankText}>{fillInBlank.display}</p>
+            <p style={styles.blankTranslation}>{translation}</p>
+            <div style={styles.blankDivider} />
+            <button style={styles.eyeButton}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+
+          {/* User Transcript Display */}
+          {userTranscript && (
+            <div style={styles.transcriptBox}>
+              <p style={styles.transcriptText}>{userTranscript}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Mic Button */}
+        <div style={styles.micArea}>
+          <button
+            style={{
+              ...styles.micButton,
+              background: isRecording ? '#ef4444' : '#5046e4'
+            }}
+            onClick={handleMicToggle}
+          >
+            <Mic size={28} color="white" />
+          </button>
+          {isRecording && (
+            <p style={styles.recordingText}>듣고 있어요...</p>
+          )}
+        </div>
+
+        {/* Bottom Button (shows after recording) */}
+        {userTranscript && (
+          <div style={styles.bottomArea}>
+            <button style={styles.primaryButton} onClick={handleNext}>
+              다음
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Step 5: 대화하기 완료 바텀시트
+  if (step === 5) {
+    return (
+      <div style={styles.container}>
+        {/* Header with Back and Progress */}
+        <header style={styles.headerStep2}>
+          <button style={styles.backButton} onClick={handleBack}>
+            <ArrowLeft size={24} color="#374151" />
+          </button>
+          <div style={styles.progressBarContainer}>
+            <div style={styles.progressBar}>
+              <div style={{ ...styles.progressFill, width: `${progress}%` }} />
+            </div>
+          </div>
+        </header>
+
+        {/* Title */}
+        <h1 style={styles.title}>이 표현으로 대화해 보세요.</h1>
+
+        {/* Main Content */}
+        <div style={styles.content}>
+          <div style={styles.sentenceCard}>
+            <p style={styles.sentenceText}>{currentCorrection.corrected}</p>
+            <p style={styles.translationText}>{translation}</p>
+          </div>
+        </div>
+
+        {/* Bottom Sheet Overlay */}
+        <div style={styles.bottomSheetOverlay}>
+          <div className="bottom-sheet-animated" style={styles.bottomSheet}>
+            <div style={styles.bottomSheetHeader}>
+              <div style={styles.bottomSheetIcon}>
+                <Check size={18} color="white" />
+              </div>
+              <h2 style={styles.bottomSheetTitle}>잘했어요!</h2>
+            </div>
+            <p style={styles.bottomSheetSubtitle}>전화 후 표현학습을 완료했어요!</p>
+            <button style={styles.bottomSheetButton} onClick={handleNext}>
+              다음
+            </button>
+          </div>
+        </div>
+
+        <style>{`
+          @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+          }
+          .bottom-sheet-animated {
+            animation: slideUp 0.3s ease;
+          }
+        `}</style>
+      </div>
+    )
+  }
+
+  // Step 6: 마무리까지 완벽해요!
+  if (step === 6) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.completeContent}>
+          {/* Celebration Icon */}
+          <div style={styles.celebrationIcon}>
+            <span style={styles.celebrationEmoji}>🎉</span>
+          </div>
+
+          <h1 style={styles.completeTitle}>마무리까지 완벽해요!</h1>
+          <p style={styles.completeSubtitle}>
+            모든 핵심 표현 연습을 완료했습니다.
+          </p>
+
+          <button style={styles.primaryButtonLarge} onClick={handleNext}>
+            확인
+          </button>
         </div>
       </div>
+    )
+  }
 
-      <style>{styles}</style>
-    </div>
-  )
+  return null
 }
 
-const styles = `
-  .practice-page {
-    min-height: 100vh;
-    background: #f9fafb;
-  }
+const styles = {
+  container: {
+    minHeight: '100vh',
+    background: 'white',
+    display: 'flex',
+    flexDirection: 'column',
+  },
 
-  .practice-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 20px;
-    background: white;
-    border-bottom: 1px solid #e5e7eb;
-  }
+  // Step 1 Header
+  headerStep1: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '16px 20px',
+  },
+  closeButton: {
+    background: 'none',
+    border: 'none',
+    padding: '8px',
+    cursor: 'pointer',
+  },
 
-  .practice-header h1 {
-    font-size: 18px;
-    font-weight: 600;
-    color: #1f2937;
-  }
+  // Step 2 Header
+  headerStep2: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    padding: '16px 20px',
+  },
+  backButton: {
+    background: 'none',
+    border: 'none',
+    padding: '4px',
+    cursor: 'pointer',
+  },
+  progressBarContainer: {
+    flex: 1,
+  },
+  progressBar: {
+    height: '6px',
+    background: '#e5e7eb',
+    borderRadius: '3px',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    background: '#5046e4',
+    borderRadius: '3px',
+    transition: 'width 0.3s ease',
+  },
 
-  .back-btn {
-    background: none;
-    color: #374151;
-  }
+  // Title
+  title: {
+    fontSize: '22px',
+    fontWeight: '700',
+    color: '#1f2937',
+    padding: '0 20px',
+    marginBottom: '32px',
+  },
 
-  .progress-text {
-    font-size: 14px;
-    color: #6b7280;
-  }
+  // Content
+  content: {
+    flex: 1,
+    padding: '0 20px',
+  },
 
-  .progress-bar {
-    height: 4px;
-    background: #e5e7eb;
-  }
+  // Sentence Card
+  sentenceCard: {
+    background: '#f9fafb',
+    borderRadius: '16px',
+    padding: '32px 24px',
+    marginBottom: '20px',
+  },
+  sentenceText: {
+    fontSize: '20px',
+    fontWeight: '600',
+    color: '#1f2937',
+    lineHeight: '1.5',
+    marginBottom: '16px',
+  },
+  translationText: {
+    fontSize: '15px',
+    color: '#8b5cf6',
+    lineHeight: '1.5',
+  },
 
-  .progress-fill {
-    height: 100%;
-    background: #5046e4;
-    transition: width 0.3s ease;
-  }
+  // Explanation Box
+  explanationBox: {
+    background: '#f9fafb',
+    border: '1px solid #e5e7eb',
+    borderRadius: '16px',
+    padding: '20px 24px',
+  },
+  explanationText: {
+    fontSize: '15px',
+    color: '#6b7280',
+    lineHeight: '1.7',
+  },
 
-  .practice-content {
-    padding: 20px;
-  }
+  // Question Card (Step 4 상단)
+  questionCard: {
+    background: '#f3f4f6',
+    borderRadius: '16px',
+    padding: '24px',
+    marginBottom: '16px',
+    position: 'relative',
+  },
+  questionText: {
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#1f2937',
+    lineHeight: '1.5',
+    marginBottom: '12px',
+  },
+  questionTranslation: {
+    fontSize: '14px',
+    color: '#6b7280',
+    lineHeight: '1.5',
+    marginBottom: '16px',
+  },
+  playButton: {
+    background: 'none',
+    border: 'none',
+    padding: '4px',
+    cursor: 'pointer',
+  },
 
-  .expression-card {
-    background: white;
-    border-radius: 16px;
-    padding: 24px;
-    margin-bottom: 16px;
-    text-align: center;
-  }
+  // Blank Card (Step 4 하단)
+  blankCard: {
+    background: 'white',
+    border: '1px solid #e5e7eb',
+    borderRadius: '16px',
+    padding: '24px',
+    marginBottom: '20px',
+  },
+  blankText: {
+    fontSize: '18px',
+    fontWeight: '500',
+    color: '#1f2937',
+    lineHeight: '1.6',
+    marginBottom: '12px',
+  },
+  blankTranslation: {
+    fontSize: '14px',
+    color: '#6b7280',
+    lineHeight: '1.5',
+    marginBottom: '16px',
+  },
+  blankDivider: {
+    height: '1px',
+    background: '#e5e7eb',
+    marginBottom: '12px',
+  },
+  eyeButton: {
+    background: 'none',
+    border: 'none',
+    padding: '4px',
+    cursor: 'pointer',
+  },
 
-  .expression-label {
-    font-size: 12px;
-    color: #22c55e;
-    font-weight: 500;
-    margin-bottom: 12px;
-  }
+  // Action Buttons (Step 2)
+  actionButtons: {
+    display: 'flex',
+    gap: '12px',
+    marginBottom: '24px',
+  },
+  actionButton: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '14px 20px',
+    background: 'white',
+    border: '1px solid #e5e7eb',
+    borderRadius: '30px',
+    cursor: 'pointer',
+  },
+  actionButtonText: {
+    fontSize: '15px',
+    fontWeight: '500',
+    color: '#374151',
+  },
 
-  .expression-text {
-    font-size: 22px;
-    font-weight: 600;
-    color: #1f2937;
-    margin-bottom: 8px;
-    line-height: 1.4;
-  }
+  // Transcript Box
+  transcriptBox: {
+    background: '#f0fdf4',
+    border: '2px solid #22c55e',
+    borderRadius: '12px',
+    padding: '16px',
+    marginBottom: '20px',
+  },
+  transcriptText: {
+    fontSize: '16px',
+    color: '#374151',
+    textAlign: 'center',
+  },
 
-  .expression-korean {
-    font-size: 14px;
-    color: #6b7280;
-    margin-bottom: 20px;
-  }
+  // Mic Area
+  micArea: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '40px 20px',
+  },
+  micButton: {
+    width: '80px',
+    height: '80px',
+    borderRadius: '50%',
+    border: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    boxShadow: '0 4px 20px rgba(80, 70, 228, 0.3)',
+    transition: 'all 0.2s',
+  },
+  recordingText: {
+    marginTop: '16px',
+    fontSize: '14px',
+    color: '#6b7280',
+  },
 
-  .listen-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 24px;
-    background: #f3f4f6;
-    border-radius: 25px;
-    font-size: 14px;
-    font-weight: 500;
-    color: #374151;
-  }
+  // Bottom Area
+  bottomArea: {
+    padding: '20px',
+    paddingBottom: '40px',
+  },
+  primaryButton: {
+    width: '100%',
+    padding: '18px',
+    background: '#5046e4',
+    color: 'white',
+    border: 'none',
+    borderRadius: '12px',
+    fontSize: '17px',
+    fontWeight: '600',
+    cursor: 'pointer',
+  },
+  primaryButtonLarge: {
+    width: '100%',
+    padding: '18px',
+    background: '#5046e4',
+    color: 'white',
+    border: 'none',
+    borderRadius: '12px',
+    fontSize: '17px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    marginTop: '40px',
+  },
 
-  .listen-btn.playing {
-    background: #5046e4;
-    color: white;
-  }
+  // Empty State
+  emptyState: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '40px',
+    textAlign: 'center',
+    color: '#6b7280',
+  },
 
-  .wrong-card {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    border-radius: 12px;
-    padding: 16px;
-    margin-bottom: 16px;
-  }
+  // Bottom Sheet (for success feedback) - 흰색 배경
+  bottomSheetOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0, 0, 0, 0.3)',
+    display: 'flex',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    zIndex: 1000,
+  },
+  bottomSheet: {
+    background: 'white',
+    borderRadius: '24px 24px 0 0',
+    width: '100%',
+    maxWidth: '480px',
+    padding: '32px 24px 40px',
+    textAlign: 'left',
+  },
+  bottomSheetHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginBottom: '8px',
+  },
+  bottomSheetIcon: {
+    width: '32px',
+    height: '32px',
+    background: '#8b5cf6',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomSheetTitle: {
+    fontSize: '20px',
+    fontWeight: '700',
+    color: '#8b5cf6',
+  },
+  bottomSheetSubtitle: {
+    fontSize: '15px',
+    color: '#6b7280',
+    marginBottom: '24px',
+    marginLeft: '44px',
+  },
+  bottomSheetButton: {
+    width: '100%',
+    padding: '18px',
+    background: '#5046e4',
+    color: 'white',
+    border: 'none',
+    borderRadius: '12px',
+    fontSize: '17px',
+    fontWeight: '600',
+    cursor: 'pointer',
+  },
 
-  .wrong-label {
-    font-size: 12px;
-    color: #dc2626;
-    font-weight: 500;
-    margin-bottom: 8px;
-  }
-
-  .wrong-text {
-    font-size: 16px;
-    color: #dc2626;
-    text-decoration: line-through;
-  }
-
-  .tip-card {
-    background: #fef3c7;
-    border: 1px solid #fcd34d;
-    border-radius: 12px;
-    padding: 16px;
-    display: flex;
-    gap: 12px;
-    margin-bottom: 24px;
-  }
-
-  .tip-icon {
-    font-size: 20px;
-  }
-
-  .tip-card p {
-    font-size: 14px;
-    color: #92400e;
-    line-height: 1.5;
-  }
-
-  .recording-section {
-    background: white;
-    border-radius: 16px;
-    padding: 24px;
-    text-align: center;
-  }
-
-  .recording-section h3 {
-    font-size: 16px;
-    font-weight: 600;
-    color: #1f2937;
-    margin-bottom: 20px;
-  }
-
-  .transcript-box {
-    background: #f9fafb;
-    border: 2px solid #e5e7eb;
-    border-radius: 12px;
-    padding: 16px;
-    margin-bottom: 20px;
-    position: relative;
-  }
-
-  .transcript-box.success {
-    border-color: #22c55e;
-    background: #f0fdf4;
-  }
-
-  .transcript-box.error {
-    border-color: #f59e0b;
-    background: #fffbeb;
-  }
-
-  .transcript-box p {
-    font-size: 16px;
-    color: #374151;
-  }
-
-  .accuracy-badge {
-    position: absolute;
-    top: -10px;
-    right: 10px;
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
-    color: white;
-  }
-
-  .mic-btn {
-    width: 72px;
-    height: 72px;
-    border-radius: 50%;
-    background: #5046e4;
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto;
-    box-shadow: 0 4px 12px rgba(80, 70, 228, 0.3);
-  }
-
-  .mic-btn.listening {
-    background: #ef4444;
-    animation: pulse 1.5s infinite;
-  }
-
-  @keyframes pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-  }
-
-  .listening-text {
-    margin-top: 12px;
-    font-size: 14px;
-    color: #6b7280;
-  }
-
-  .result-buttons {
-    display: flex;
-    gap: 12px;
-    justify-content: center;
-  }
-
-  .retry-btn {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 14px 24px;
-    background: #f3f4f6;
-    border-radius: 12px;
-    font-size: 14px;
-    font-weight: 500;
-    color: #374151;
-  }
-
-  .next-btn {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 14px 24px;
-    background: #5046e4;
-    border-radius: 12px;
-    font-size: 14px;
-    font-weight: 500;
-    color: white;
-  }
-
-  /* Complete Section */
-  .complete-section {
-    padding: 40px 20px;
-    text-align: center;
-  }
-
-  .complete-icon {
-    width: 80px;
-    height: 80px;
-    background: #22c55e;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 24px;
-  }
-
-  .complete-section h2 {
-    font-size: 24px;
-    font-weight: 600;
-    color: #1f2937;
-    margin-bottom: 8px;
-  }
-
-  .complete-section > p {
-    font-size: 16px;
-    color: #6b7280;
-    margin-bottom: 32px;
-  }
-
-  .score-summary {
-    margin-bottom: 32px;
-  }
-
-  .score-circle {
-    width: 100px;
-    height: 100px;
-    background: linear-gradient(135deg, #5046e4, #7c3aed);
-    border-radius: 50%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 12px;
-  }
-
-  .score-number {
-    font-size: 32px;
-    font-weight: 700;
-    color: white;
-  }
-
-  .score-label {
-    font-size: 14px;
-    color: rgba(255,255,255,0.8);
-  }
-
-  .score-summary > p {
-    font-size: 14px;
-    color: #6b7280;
-  }
-
-  .score-breakdown {
-    background: white;
-    border-radius: 16px;
-    padding: 16px;
-    margin-bottom: 32px;
-  }
-
-  .score-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 0;
-    border-bottom: 1px solid #f3f4f6;
-  }
-
-  .score-item:last-child {
-    border-bottom: none;
-  }
-
-  .score-text {
-    font-size: 14px;
-    color: #374151;
-  }
-
-  .score-badge {
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
-    color: white;
-  }
-
-  .complete-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .btn-secondary {
-    padding: 16px;
-    background: #f3f4f6;
-    border-radius: 12px;
-    font-size: 16px;
-    font-weight: 500;
-    color: #374151;
-  }
-
-  .btn-primary {
-    padding: 16px;
-    background: #5046e4;
-    border-radius: 12px;
-    font-size: 16px;
-    font-weight: 500;
-    color: white;
-  }
-`
+  // Complete Screen (Final)
+  completeContent: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '40px 20px',
+    textAlign: 'center',
+  },
+  celebrationIcon: {
+    width: '100px',
+    height: '100px',
+    background: '#f0f9ff',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: '24px',
+  },
+  celebrationEmoji: {
+    fontSize: '48px',
+  },
+  completeTitle: {
+    fontSize: '26px',
+    fontWeight: '700',
+    color: '#1f2937',
+    marginBottom: '12px',
+  },
+  completeSubtitle: {
+    fontSize: '16px',
+    color: '#6b7280',
+    lineHeight: '1.5',
+  },
+}
 
 export default Practice

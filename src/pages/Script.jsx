@@ -510,11 +510,10 @@ const styles = `
 
   .user-bubble {
     max-width: 85%;
-    background: #7c3aed;
+    background: #8b5cf6;
     color: white;
     padding: 16px;
-    border-radius: 20px;
-    border-top-right-radius: 4px;
+    border-radius: 16px;
   }
 
   .user-bubble .message-text {
@@ -573,10 +572,11 @@ const styles = `
     max-width: 85%;
     background: white;
     border: 1px solid #e5e7eb;
-    border-left: 3px solid #7c3aed;
+    border-left: 3px solid #8b5cf6;
     padding: 16px;
     border-radius: 12px;
     border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
   }
 
   .correction-bubble.loading {
@@ -595,35 +595,32 @@ const styles = `
   }
 
   .pen-animation {
-    color: #7c3aed;
+    color: #8b5cf6;
     animation: penWrite 0.8s ease-in-out infinite;
   }
 
   @keyframes penWrite {
-    0%, 100% {
-      transform: translateX(0) rotate(0deg);
-    }
-    25% {
-      transform: translateX(4px) rotate(5deg);
+    0% {
+      transform: translateX(0) rotate(-15deg);
     }
     50% {
-      transform: translateX(8px) rotate(0deg);
+      transform: translateX(40px) rotate(15deg);
     }
-    75% {
-      transform: translateX(4px) rotate(-5deg);
+    100% {
+      transform: translateX(0) rotate(-15deg);
     }
   }
 
   .corrected-text {
     font-size: 15px;
-    line-height: 1.6;
-    color: #7c3aed;
+    line-height: 1.7;
+    color: #8b5cf6;
     font-weight: 500;
-    margin-bottom: 12px;
+    margin-bottom: 16px;
   }
 
   .grammar-explanation {
-    font-size: 13px;
+    font-size: 14px;
     line-height: 1.7;
     color: #6b7280;
   }
@@ -644,10 +641,10 @@ const styles = `
 
   .ai-bubble {
     max-width: 85%;
-    background: #f3f4f6;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
     padding: 16px;
-    border-radius: 20px;
-    border-top-left-radius: 4px;
+    border-radius: 16px;
   }
 
   .ai-bubble .message-text {
@@ -661,7 +658,7 @@ const styles = `
     display: block;
     background: none;
     font-size: 13px;
-    color: #5046e4;
+    color: #9ca3af;
     padding: 4px 0;
     margin-bottom: 8px;
   }
@@ -671,11 +668,11 @@ const styles = `
     padding: 4px 0;
     display: flex;
     align-items: center;
-    color: #9ca3af;
+    color: #d1d5db;
   }
 
   .ai-tts-btn.playing {
-    color: #5046e4;
+    color: #6b7280;
   }
 
   .translation-text {
@@ -683,7 +680,7 @@ const styles = `
     line-height: 1.6;
     color: #6b7280;
     padding: 12px;
-    background: #e5e7eb;
+    background: #f3f4f6;
     border-radius: 8px;
     margin-top: 12px;
   }

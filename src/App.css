@@ -1,3 +1,6 @@
+/* Import common styles */
+@import './styles/variables.css';
+
 /* App Container */
 .app {
   min-height: 100vh;
@@ -219,8 +222,8 @@
   color: var(--gray-400);
 }
 
-/* Tutor Card */
-.tutor-card {
+/* Tutor Card - Settings Page Only */
+.settings-tutor-card {
   display: flex;
   align-items: center;
   gap: 16px;
@@ -229,7 +232,7 @@
   border-radius: var(--radius);
 }
 
-.tutor-avatar {
+.settings-tutor-avatar {
   width: 64px;
   height: 64px;
   border-radius: 50%;

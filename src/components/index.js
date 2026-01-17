@@ -1,12 +1,25 @@
 /**
  * @file components/index.js
- * @description 공통 컴포넌트 내보내기
+ * @description 공통 컴포넌트 모음
  *
- * 이 파일을 통해 모든 공통 컴포넌트를 한 곳에서 import할 수 있습니다.
- *
- * @example
- * import { TutorAvatar, BottomNav } from '../components'
+ * 사용법:
+ * import { Modal, Card, LoadingSpinner, SettingSection } from '../components'
  */
 
-export { default as TutorAvatar } from './TutorAvatar'
+// 레이아웃 컴포넌트
 export { default as BottomNav } from './BottomNav'
+export { default as TutorAvatar } from './TutorAvatar'
+
+// UI 컴포넌트
+export { Modal } from './Modal'
+export { Card, StatCard } from './Card'
+export { LoadingSpinner, InlineLoader } from './LoadingSpinner'
+
+// 설정 관련 컴포넌트
+export {
+  SettingSection,
+  SettingItem,
+  SettingToggle,
+  SettingOptions,
+  PageHeader
+} from './SettingComponents'
