@@ -17,6 +17,8 @@ This directory contains detailed documentation for each development phase of the
 | [Phase 7](PHASE-07-settings-ui-refinement.md) | Settings UI/UX Refinement | ✅ Completed | 2026-01-12 |
 | [Phase 8](PHASE-08-constant-refactoring.md) | Constant Refactoring & Code Cleanup | ✅ Completed | 2026-01-12 |
 | [Phase 9](PHASE-09-ux-ui-improvements.md) | UX/UI Improvements | ✅ Completed | 2026-01-12 |
+| [Phase 10](PHASE-10-call-tab-ui-refinement.md) | Call Tab UI Refinement | ✅ Completed | 2026-01-12 |
+| [Phase 11](PHASE-11-native-call-scheduling.md) | Native Call Scheduling & Firebase Push | ✅ Completed | 2026-01-17 |
 
 ---
 
@@ -80,6 +82,21 @@ This directory contains detailed documentation for each development phase of the
 - Home.jsx: 150단어 기준 UI, 하단 네비게이션 액션
 - Settings.jsx: 저장 토스트 알림
 
+### Phase 10: Call Tab UI Refinement
+- TutorSettings.jsx: X 버튼, 세로 카드 레이아웃, 태그 포맷 변경
+- Call.jsx: 자막 톤 지시어 제거, 컨트롤 레이아웃
+- Result.jsx: 2개 카드, 토스트 알림, 배경색 변경
+- constants/index.js: SPEEDS 옵션 2개로 축소
+
+### Phase 11: Native Call Scheduling & Firebase Push
+- IncomingCallActivity.java: 네이티브 전화 수신 화면
+- CallSchedulerPlugin.java: Capacitor 브릿지 플러그인
+- CallSchedulerService.java: Foreground Service
+- CallAlarmReceiver.java: Full-Screen Intent Notification
+- Firebase Cloud Messaging 푸시 알림 연동
+- notificationService.js: 동기부여 메시지 15가지 (10분 전 알림)
+- 상태바 색상 수정 (흰색 배경)
+
 ---
 
 ## Tech Stack Summary
@@ -116,11 +133,12 @@ This directory contains detailed documentation for each development phase of the
 
 | Phase | Title | Description |
 |-------|-------|-------------|
-| Phase 9 | Progress Tracking | Track learning over sessions |
-| Phase 10 | Lesson Plans | Structured learning paths |
-| Phase 11 | Mobile Deployment | App Store & Play Store |
-| Phase 12 | Analytics | Usage & performance metrics |
-| Phase 13 | Component Extraction | Common components, CSS separation |
+| Phase 12 | iOS Call Scheduling | CallKit 연동으로 iOS 전화 예약 |
+| Phase 13 | Auto Re-scheduling | 통화 후 다음 주 자동 재예약 |
+| Phase 14 | Missed Call Notification | 부재중 전화 알림 기능 |
+| Phase 15 | Play Store Deployment | Google Play Store 배포 |
+| Phase 16 | App Store Deployment | Apple App Store 배포 |
+| Phase 17 | Analytics Dashboard | 사용자 학습 통계 대시보드 |
 
 ---
 
